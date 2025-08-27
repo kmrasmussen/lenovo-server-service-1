@@ -1,28 +1,50 @@
 name: 'Deploy to server'
-
 on:
   push:
     branches: [ master ]
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: production1
     steps:
-    - name: Install cloudflared
-      run: |
-        wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-        sudo dpkg -i cloudflared-linux-amd64.deb
-    - name: Deploy to server
-      env:
-        CF_ACCESS_CLIENT_ID: ${{ secrets.CLOUDFLARE_SERVICE_TOKEN_ID }}
-        CF_ACCESS_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_SERVICE_TOKEN_SECRET }}
-      run: |
-        echo "${{ secrets.SERVER_SSH_KEY }}" > ssh_key
-        chmod 600 ssh_key
-        ssh -i ssh_key -o StrictHostKeyChecking=no -o ProxyCommand="cloudflared access ssh --hostname lenovo-server-ssh.intercebd.com" ${{ secrets.SERVER_USER }}@lenovo-server-ssh.intercebd.com << 'EOF'
-          mkdir -p ~/deployed
-          cd ~/deployed/lenovo-server-service-1 || git clone https://github.com/kmrasmussen/lenovo-server-service-1.git ~/deployed/lenovo-server-service-1 && cd ~/deployed/lenovo-server-service-1
-          git pull origin master
-          docker compose down || true
-          docker compose up -d --build
-        EOF
+      - name: Install cloudflared
+        run: |
+          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+      
+      - name: Create env file
+        run: |
+          cat > .env << 'EOF'
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          AUTH_GOOGLE_ID=${{ secrets.AUTH_GOOGLE_ID }}
+          AUTH_GOOGLE_SECRET=${{ secrets.AUTH_GOOGLE_SECRET }}
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          AWS_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_S3_SECRET_ACCESS_KEY=${{ secrets.AWS_S3_SECRET_ACCESS_KEY }}
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
+          GOOGLE_GEOCODING_API=${{ secrets.GOOGLE_GEOCODING_API }}
+          MOONDREAM_API_KEY=${{ secrets.MOONDREAM_API_KEY }}
+          EOF
+      
+      - name: Deploy to server
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CLOUDFLARE_SERVICE_TOKEN_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_SERVICE_TOKEN_SECRET }}
+        run: |
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ssh_key
+          chmod 600 ssh_key
+          
+          # Transfer env file
+          scp -i ssh_key -o StrictHostKeyChecking=no -o ProxyCommand="cloudflared access ssh --hostname lenovo-server-ssh.intercebd.com" .env ${{ secrets.SERVER_USER }}@lenovo-server-ssh.intercebd.com:~/
+          
+          # Deploy
+          ssh -i ssh_key -o StrictHostKeyChecking=no -o ProxyCommand="cloudflared access ssh --hostname lenovo-server-ssh.intercebd.com" ${{ secrets.SERVER_USER }}@lenovo-server-ssh.intercebd.com << 'EOF'
+            mkdir -p ~/deployed
+            cd ~/deployed/lenovo-server-service-1 || git clone https://github.com/kmrasmussen/lenovo-server-service-1.git ~/deployed/lenovo-server-service-1 && cd ~/deployed/lenovo-server-service-1
+            git config pull.rebase true
+            git pull origin master
+            mv ~/.env .
+            docker compose down || true
+            docker compose up -d --build
+          EOF
