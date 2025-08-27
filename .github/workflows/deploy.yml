@@ -36,10 +36,10 @@ jobs:
           chmod 600 ssh_key
           
           # Transfer env file
-          scp -i ssh_key -o StrictHostKeyChecking=no -o ProxyCommand="cloudflared access ssh --hostname lenovo-server-ssh.intercebd.com" .env ${{ secrets.SERVER_USER }}@lenovo-server-ssh.intercebd.com:~/
+          scp -i ssh_key -o StrictHostKeyChecking=no -o ProxyCommand="cloudflared access ssh --hostname lenovo-ssh.intercebd.com" .env ${{ secrets.SERVER_USER }}@lenovo-ssh.intercebd.com:~/
           
           # Deploy
-          ssh -i ssh_key -o StrictHostKeyChecking=no -o ProxyCommand="cloudflared access ssh --hostname lenovo-server-ssh.intercebd.com" ${{ secrets.SERVER_USER }}@lenovo-server-ssh.intercebd.com << 'EOF'
+          ssh -i ssh_key -o StrictHostKeyChecking=no -o ProxyCommand="cloudflared access ssh --hostname lenovo-ssh.intercebd.com" ${{ secrets.SERVER_USER }}@lenovo-ssh.intercebd.com << 'EOF'
             mkdir -p ~/deployed
             cd ~/deployed/lenovo-server-service-1 || git clone https://github.com/kmrasmussen/lenovo-server-service-1.git ~/deployed/lenovo-server-service-1 && cd ~/deployed/lenovo-server-service-1
             git config pull.rebase true
@@ -47,4 +47,8 @@ jobs:
             mv ~/.env .
             docker compose down || true
             docker compose up -d --build
+            
+            # Clean up old Docker images and containers to prevent disk space issues
+            docker system prune -f
+            docker image prune -a -f
           EOF
