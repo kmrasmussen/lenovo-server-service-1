@@ -46,7 +46,7 @@ jobs:
             git config pull.rebase true
             git pull origin master
             mv ~/.env .
-            docker compose down || true
+            docker compose down --remove-orphans || true
             docker compose up -d --build
             
             # Clean up old Docker images and containers to prevent disk space issues

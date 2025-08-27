@@ -12,7 +12,9 @@ COPY pyproject.toml uv.lock ./
 
 # Create the virtual environment and install all dependencies into it.
 # This part is correct and works as intended.
-RUN uv venv && uv sync --frozen
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=cache,target=/root/.cache/pip \
+    uv venv && uv sync --frozen
 
 # (Optional, for your own verification)
 # This command will print the entire file structure so you can see
