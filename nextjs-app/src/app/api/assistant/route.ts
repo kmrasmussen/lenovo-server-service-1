@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import OpenAI from 'openai';
 import { neon } from '@neondatabase/serverless';
@@ -11,7 +11,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const GET = async (_req: NextRequest) => {
+const GET = async () => {
   const session = await auth();
   
   if (!session?.user?.id) {

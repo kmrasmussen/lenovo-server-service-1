@@ -1,5 +1,3 @@
-import { vl } from "moondream";
-import fs from "fs";
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -84,7 +82,6 @@ const POST = async (req: NextRequest) => {
     const imageEmbedding = imageEmbeddingResponse.image_embedding;
     
     const fileExtension = imageFile.name.split('.').pop() || 'jpg';
-    const imageUuid = uuidv4();
     const s3Key = `images/${userId}/${uuidv4()}.${fileExtension}`;
 
     const uploadCommand = new PutObjectCommand({
@@ -164,7 +161,7 @@ const POST = async (req: NextRequest) => {
   }
 };
 
-const GET = async (_req: NextRequest) => {
+const GET = async () => {
   const session = await auth();
   
   if (!session?.user?.id) {

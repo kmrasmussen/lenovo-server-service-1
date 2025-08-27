@@ -20,7 +20,7 @@ export default function Otherpage() {
       clearInterval(pollingInterval);
     };
     */
-  }, []);
+  }, [dumpList]);
 
   const fetchDumpList = () => {
     fetch('api/transcribe', {
@@ -32,7 +32,7 @@ export default function Otherpage() {
       console.log('dump list fetch data', data);
       setDumpList(data.messages) //data.dbResult.map((item: any) => item.transcript))
     })
-    .catch((error) => console.log('error fetching dump list'));
+    .catch((error) => console.log('error fetching dump list', error));
   }
 
   return (<div className="h-full flex flex-col w-full">
