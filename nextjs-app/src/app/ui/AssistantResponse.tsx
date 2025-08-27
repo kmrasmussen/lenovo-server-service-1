@@ -2,7 +2,10 @@
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
-const AssistantResponse = (prop: any) => {
+type AssistantResponseProp = {
+  fetchDumpList: () => void
+}
+const AssistantResponse = ({ fetchDumpList }: AssistantResponseProp) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const onClick = () => {
@@ -14,7 +17,7 @@ const AssistantResponse = (prop: any) => {
     .then((response) => response.json())
     .then((result) => {
       console.log('assistant result', result)
-      prop.fetchDumpList();
+      fetchDumpList();
       setIsLoading(false);
     })
     .catch((error) => {

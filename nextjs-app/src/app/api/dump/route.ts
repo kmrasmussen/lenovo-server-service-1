@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL!);
 
 const allDumps: Record<string, string[]> = {};
 
@@ -23,7 +21,7 @@ const POST = async (req: NextRequest) => {
   return NextResponse.json({ success: true, allDumps: allDumps[session.user.id] });
 };
 
-const GET = async (_req: NextRequest) => {
+const GET = async () => {
   const session = await auth();
   
   if (!session?.user?.id) {

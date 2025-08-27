@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import Image from 'next/image';
 
 const Camera = () => {
   const [similarImages, setSimilarImages] = useState<string[]>([]);
@@ -90,7 +91,7 @@ const Camera = () => {
     <Button onClick={takePicture}>Take picture</Button>
     <canvas className='hidden' ref={canvasRef} />
     <div><ul>{
-      similarImages.map((imgUrl) => (<li><img src={imgUrl} /></li>))
+      similarImages.map((imgUrl, i) => (<li key={i}><Image src={imgUrl} alt="picture you took" /></li>))
       }</ul></div>
   </div>);
 }

@@ -54,7 +54,7 @@ const POST = async (req: NextRequest) => {
   }
 };
 
-const GET = async (_req: NextRequest) => {
+const GET = async () => {
   const session = await auth();
   
   if (!session?.user?.id) {

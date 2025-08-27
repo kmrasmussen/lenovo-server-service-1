@@ -1,6 +1,7 @@
 'use client';
 import { PictureDto } from '@/app/types/db';
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 
 const PicturesPage = () => {
   const [picturesList, setPicturesList] = useState<PictureDto[]>([]);
@@ -19,12 +20,14 @@ const PicturesPage = () => {
       console.log('dump list fetch data', data);
       setPicturesList(data.picsWithUrls) 
     })
-    .catch((error) => console.log('error fetching dump list'));
+    .catch((error) => console.log('error fetching dump list', error));
   }
 
   return (<div className="h-full flex flex-col w-full">
     {picturesList.map((pic) => {
-      return (<div key={pic.id}><img src={pic.signedUrl} /></div>);
+      return (<div key={pic.id}><Image
+        src={pic.signedUrl}
+        alt="description" /></div>);
     })}
   </div>);
 }
