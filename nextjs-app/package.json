@@ -47,7 +47,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@neondatabase/serverless": "^1.0.1"
+      "@auth/neon-adapter>@neondatabase/serverless": "^1.0.1"
     }
   }
 }
