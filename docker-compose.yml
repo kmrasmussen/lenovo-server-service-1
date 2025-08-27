@@ -7,11 +7,20 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
     restart: unless-stopped
+  ml-service:
+    build: ./ml-service
+    ports:
+      - "3001:5000"
+    restart: unless-stopped
   nextjs-app:
     build:
       context: ./nextjs-app
       args:
         - DATABASE_URL=${DATABASE_URL}
+        - AUTH_SECRET=${AUTH_SECRET}
+        - NEXTAUTH_URL=${NEXTAUTH_URL}
+        - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+        - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
         - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
         - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
         - GOOGLE_GEOCODING_API=${GOOGLE_GEOCODING_API}
@@ -24,6 +33,11 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - AUTH_TRUST_HOST=true
+      - AUTH_SECRET=${AUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL}
       - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
