@@ -1,0 +1,28 @@
+name: 'Deploy to server'
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install cloudflared
+      run: |
+        wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        sudo dpkg -i cloudflared-linux-amd64.deb
+    - name: Deploy to server
+      env:
+        CF_ACCESS_CLIENT_ID: ${{ secrets.CLOUDFLARE_SERVICE_TOKEN_ID }}
+        CF_ACCESS_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_SERVICE_TOKEN_SECRET }}
+      run: |
+        echo "${{ secrets.SERVER_SSH_KEY }}" > ssh_key
+        chmod 600 ssh_key
+        ssh -i ssh_key -o StrictHostKeyChecking=no -o ProxyCommand="cloudflared access ssh --hostname lenovo-server-ssh.intercebd.com" ${{ secrets.SERVER_USER }}@lenovo-server-ssh.intercebd.com << 'EOF'
+          mkdir -p ~/deployed
+          cd ~/deployed/lenovo-server-service-1 || git clone https://github.com/kmrasmussen/lenovo-server-service-1.git ~/deployed/lenovo-server-service-1 && cd ~/deployed/lenovo-server-service-1
+          git pull origin master
+          docker compose down || true
+          docker compose up -d --build
+        EOF
