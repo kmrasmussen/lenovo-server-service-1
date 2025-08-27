@@ -16,6 +16,10 @@ jobs:
         run: |
           cat > .env << 'EOF'
           DATABASE_URL=${{ secrets.DATABASE_URL }}
+          AUTH_SECRET=${{ secrets.AUTH_SECRET }}
+          NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}
           AUTH_GOOGLE_ID=${{ secrets.AUTH_GOOGLE_ID }}
           AUTH_GOOGLE_SECRET=${{ secrets.AUTH_GOOGLE_SECRET }}
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
