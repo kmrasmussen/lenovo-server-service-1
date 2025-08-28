@@ -23,6 +23,7 @@ jobs:
           AUTH_GOOGLE_ID=${{ secrets.AUTH_GOOGLE_ID }}
           AUTH_GOOGLE_SECRET=${{ secrets.AUTH_GOOGLE_SECRET }}
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
           AWS_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}
           AWS_S3_SECRET_ACCESS_KEY=${{ secrets.AWS_S3_SECRET_ACCESS_KEY }}
           AWS_REGION=${{ secrets.AWS_REGION }}
@@ -51,8 +52,7 @@ jobs:
             git pull origin master
             mv ~/.env .
             docker compose down --remove-orphans || true
-            docker compose up -d --build
-
-
+            docker compose build
+            docker compose up -d
             docker image prune -f --filter "dangling=true"
           EOF

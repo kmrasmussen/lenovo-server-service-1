@@ -39,11 +39,17 @@ const GET = async () => {
     messages = messages.reverse();
 
     console.log('okay getting response for this convo:', messages);
-   
-    const completion = await openai.chat.completions.create({
-      model: "openai/gpt-4o-mini",
-      messages: messages
-    }); 
+    
+    let completion;
+    try {
+      completion = await openai.chat.completions.create({
+        model: "openai/gpt-4o-mini",
+        messages: messages
+      }); 
+    }
+    catch(error) {
+      return NextResponse.json({ success: false, message: (error as Error).message, errorNote: 'error getting chatcompletions' }, { status: 400 });
+    }
 
     const responseContent = completion?.choices[0]?.message;
 
@@ -55,7 +61,7 @@ const GET = async () => {
 
     return NextResponse.json({ success: true, result: result, responseContent: responseContent, insertionResult: insertionResult });
   } catch(error) {
-    return NextResponse.json({ success: false, message: error }, { status: 400 });
+    return NextResponse.json({ success: false, message: (error as Error).message }, { status: 400 });
   }
 }
 
