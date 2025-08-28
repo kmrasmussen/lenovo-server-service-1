@@ -4,31 +4,50 @@ name: 'Deploy to Servers'
 # This section defines when the workflow will run.
 on:
   push:
-    branches: [ master ]
+    branches: [ staging, master ]
 
 # This section defines the jobs to be run.
 jobs:
-  # 'deploy' is the ID of our job.
-  deploy:
+  # JOB 1: SETUP THE MATRIX
+  # This job's only purpose is to determine which server list to use based on the branch
+  # and output it for the next job.
+  setup-matrix:
     runs-on: ubuntu-latest
-    environment: production1
-    strategy:
-      # This ensures that if one server fails, the others are still attempted.
-      fail-fast: false
-      # The matrix defines a job for each item in the list.
-      matrix:
-        server:
-          - host: lenovo-ssh.intercebd.com
-            user: lenovouser
-          - host: dell-ssh.intercebd.com
-            user: delluser
-
-    # Steps are the sequence of tasks that will be executed in the job.
+    outputs:
+      # Define an output named 'server_list'
+      server_list: ${{ steps.set-matrix.outputs.server_list }}
     steps:
-      # Each step starts with a hyphen '-'.
+      - id: set-matrix
+        name: Determine Server Matrix
+        run: |
+          if [[ "${{ github.ref_name }}" == "staging" ]]; then
+            echo "Using staging server list"
+            echo 'server_list={"server":[{"host":"lenovo-ssh.intercebd.com","user":"lenovouser"}]}' >> $GITHUB_OUTPUT
+          else
+            echo "Using production server list"
+            echo 'server_list={"server":[{"host":"dell-ssh.intercebd.com","user":"delluser"}]}' >> $GITHUB_OUTPUT
+          fi
+
+  # JOB 2: DEPLOY
+  # This job will now run after the setup job is complete.
+  deploy:
+    # It requires 'setup-matrix' to finish successfully before it starts.
+    needs: setup-matrix
+    name: Deploy to ${{ github.ref_name == 'staging' && 'Staging' || 'Production' }}
+    runs-on: ubuntu-latest
+    
+    # Dynamically select the environment based on the branch.
+    environment: ${{ github.ref_name == 'staging' && 'testing' || 'production1' }}
+    
+    strategy:
+      fail-fast: false
+      # THE MATRIX IS NOW BUILT FROM THE OUTPUT OF THE PREVIOUS JOB
+      # This syntax is valid and robust.
+      matrix: ${{ fromJSON(needs.setup-matrix.outputs.server_list) }}
+
+    # The rest of your steps remain exactly the same.
+    steps:
       - name: Create env file
-        # 'run:' is followed by a pipe '|' for a multi-line script.
-        # Everything below the pipe must be indented more than 'run:'.
         run: |
           cat > .env << 'EOF'
           DATABASE_URL=${{ secrets.DATABASE_URL }}
@@ -73,44 +92,33 @@ jobs:
         env:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CLOUDFLARE_SERVICE_TOKEN_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CLOUDFLARE_SERVICE_TOKEN_SECRET }}
-        # The 'run' script block starts here.
         run: |
-          # The lines in this script are all indented by 10 spaces.
           echo "${{ secrets.SERVER_SSH_KEY }}" > ssh_key
           chmod 600 ssh_key
 
-          # This variable makes the scp and ssh commands safer and cleaner.
           REMOTE_USER_HOST="${{ matrix.server.user }}@${{ matrix.server.host }}"
 
-          # Transfer the .env file.
           scp -i ssh_key \
               -o StrictHostKeyChecking=no \
               -o ProxyCommand="cloudflared access ssh --hostname ${{ matrix.server.host }}" \
               .env "$REMOTE_USER_HOST:~/."
           
-          # This starts the SSH command with a "here document".
-          # The script between << 'EOF' and the final EOF will be run on the remote server.
           ssh -i ssh_key \
               -o StrictHostKeyChecking=no \
               -o ServerAliveInterval=60 \
               -o ServerAliveCountMax=10 \
               -o ProxyCommand="cloudflared access ssh --hostname ${{ matrix.server.host }}" \
               "$REMOTE_USER_HOST" << 'EOF'
-            # These lines are indented further because they are INSIDE the here-document.
-            # This indentation is for readability only; it is not required by the shell.
             set -e
             mkdir -p ~/deployed
             cd ~/deployed/lenovo-server-service-1 || git clone https://github.com/kmrasmussen/lenovo-server-service-1.git ~/deployed/lenovo-server-service-1
             cd ~/deployed/lenovo-server-service-1
             git config pull.rebase true
-            git pull origin master
+            git pull origin ${{ github.ref_name }}
             mv ~/.env .
             docker compose build
             echo "Pre-pulling Docker images..."
             docker compose pull --ignore-pull-failures || true
             docker compose up -d --remove-orphans
             docker image prune -f --filter "dangling=true"
-          # CRITICAL: This final 'EOF' marks the end of the ssh script.
-          # It MUST be at the beginning of the line, with the same indentation
-          # as the 'echo' and 'chmod' commands above it. No spaces before it.
           EOF
