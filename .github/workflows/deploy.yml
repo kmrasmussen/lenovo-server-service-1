@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     
     # Dynamically select the environment based on the branch.
-    environment: ${{ github.ref_name == 'staging' && 'testing' || 'production1' }}
+    environment: ${{ github.ref_name == 'staging' && 'test' || 'production1' }}
     
     strategy:
       fail-fast: false
