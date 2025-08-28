@@ -52,8 +52,7 @@ jobs:
             mv ~/.env .
             docker compose down --remove-orphans || true
             docker compose up -d --build
-            
-            # Clean up old Docker images and containers to prevent disk space issues
-            docker system prune -f
-            docker image prune -a -f
+
+
+            docker image prune -f --filter "dangling=true"
           EOF
