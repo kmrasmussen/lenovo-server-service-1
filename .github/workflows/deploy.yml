@@ -7,10 +7,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: production1
     steps:
-      - name: Setup cloudflared
-        uses: cloudflare/setup-cloudflared@v1
+      - name: Cache cloudflared binary
+        id: cache-cloudflared
+        uses: actions/cache@v4
         with:
-          version: latest
+          path: ~/cloudflared-linux-amd64.deb
+          key: ${{ runner.os }}-cloudflared-2025.8.1
+      - name: Download cloudflared
+        if: steps.cache-floudflared.outputs.cache-hit != 'true'
+        run: |
+          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+      - name: Install cloudflared 
+        run: sudo dpkg -i cloudflared-linux-amd64.deb
       - name: Create env file
         run: |
           cat > .env << 'EOF'
