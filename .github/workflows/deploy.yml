@@ -7,18 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: production1
     steps:
-      - name: Cache cloudflared binary
-        id: cache-cloudflared
-        uses: actions/cache@v4
-        with:
-          path: ~/cloudflared-linux-amd64.deb
-          key: ${{ runner.os }}-cloudflared-2025.8.1
-      - name: Download cloudflared
-        if: steps.cache-floudflared.outputs.cache-hit != 'true'
+      - name: Install cloudflared
         run: |
           wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-      - name: Install cloudflared 
-        run: sudo dpkg -i cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+      
       - name: Create env file
         run: |
           cat > .env << 'EOF'
@@ -59,5 +52,7 @@ jobs:
             mv ~/.env .
             docker compose down --remove-orphans || true
             docker compose up -d --build
+
+
             docker image prune -f --filter "dangling=true"
           EOF
