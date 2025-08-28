@@ -27,7 +27,11 @@ const PicturesPage = () => {
     {picturesList.map((pic) => {
       return (<div key={pic.id}><Image
         src={pic.signedUrl}
-        alt="description" /></div>);
+        width={0}
+        height={0}
+        style={{ width: 'auto', height: 'auto' }} 
+        alt="description"
+        unoptimized /></div>);
     })}
   </div>);
 }
