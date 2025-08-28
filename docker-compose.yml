@@ -1,16 +1,19 @@
 services:
-  fastapi-service:
-    build: ./fastapi-service
-    ports:
-      - "3000:8000"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-    restart: unless-stopped
   ml-service:
     build: ./ml-service
     ports:
       - "3001:5000"
     restart: unless-stopped
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-batch-size: "100"
+        loki-retries: "2"
+        loki-timeout: "1s"
+    labels:
+      - "logging=promtail"
+      - "service=ml-service"
   nextjs-app:
     build:
       context: ./nextjs-app
@@ -51,3 +54,39 @@ services:
       - AWS_REGION=${AWS_REGION}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
     restart: unless-stopped
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-batch-size: "100"
+        loki-retries: "2"
+        loki-timeout: "1s"
+    labels:
+      - "logging=promtail"
+      - "service=nextjs-app"
+  loki:
+    image: grafana/loki:2.9.0
+    ports:
+      - "3100:3100"
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "9051:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+volumes:
+  loki-data:
+  grafana-data:

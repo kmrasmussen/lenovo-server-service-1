@@ -25,6 +25,8 @@ jobs:
           S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}
           GOOGLE_GEOCODING_API=${{ secrets.GOOGLE_GEOCODING_API }}
           MOONDREAM_API_KEY=${{ secrets.MOONDREAM_API_KEY }}
+          GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWROD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           EOF
 
       - name: Validate env file
