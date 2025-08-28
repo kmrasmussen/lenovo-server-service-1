@@ -51,8 +51,7 @@ jobs:
             git config pull.rebase true
             git pull origin master
             mv ~/.env .
-            docker compose down --remove-orphans || true
             docker compose build
-            docker compose up -d
+            docker compose up -d --remove-orphans
             docker image prune -f --filter "dangling=true"
           EOF
