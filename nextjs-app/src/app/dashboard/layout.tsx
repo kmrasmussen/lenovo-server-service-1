@@ -19,7 +19,7 @@ export default async function RootLayout({
   if (!session?.user?.id) {
     return (
     <div className="flex flex-col items-center justify-center min-h-screen">
-    you are not logged in
+    ready when you are
     <AuthBox />
     </div>
     );
