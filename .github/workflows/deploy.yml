@@ -26,7 +26,7 @@ jobs:
           GOOGLE_GEOCODING_API=${{ secrets.GOOGLE_GEOCODING_API }}
           MOONDREAM_API_KEY=${{ secrets.MOONDREAM_API_KEY }}
           GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
-          GRAFANA_ADMIN_PASSWROD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD}}
           EOF
 
       - name: Validate env file
@@ -68,6 +68,8 @@ jobs:
             git pull origin master
             mv ~/.env .
             docker compose build
+            echo "Pre-pulling Docker images..."
+            docker compose pull --ignore-pull-failures || echo "Some pulls failed, continuing..."
             docker compose up -d --remove-orphans
             docker image prune -f --filter "dangling=true"
           EOF
