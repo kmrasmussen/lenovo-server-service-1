@@ -7,11 +7,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production1
     steps:
-      - name: Install cloudflared
-        run: |
-          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared-linux-amd64.deb
-      
       - name: Create env file
         run: |
           cat > .env << 'EOF'
@@ -31,6 +26,25 @@ jobs:
           GOOGLE_GEOCODING_API=${{ secrets.GOOGLE_GEOCODING_API }}
           MOONDREAM_API_KEY=${{ secrets.MOONDREAM_API_KEY }}
           EOF
+
+      - name: Validate env file
+        run: |
+          while IFS= read -r line; do
+            if [[ $line == *"="* ]]; then
+              key=$(echo "$line" | cut -d'=' -f1)
+              value=$(echo "$line" | cut -d'=' -f2-)
+              if [[ -z "$value" ]]; then
+                echo "❌ $key is empty"
+                exit 1
+              fi
+              echo "✅ $key is set"
+            fi
+          done < .env
+      
+      - name: Install cloudflared
+        run: |
+          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
       
       - name: Deploy to server
         env:
