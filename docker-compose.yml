@@ -2,7 +2,7 @@ services:
   ml-service:
     build: ./ml-service
     ports:
-      - "3001:5000"
+      - "9052:5000"
     restart: unless-stopped
     logging:
       driver: "loki"

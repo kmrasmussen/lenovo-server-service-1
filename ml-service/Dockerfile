@@ -12,6 +12,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY . .
 
+
+
 EXPOSE 5000
 
 CMD ["/app/.venv/bin/python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
