@@ -3,7 +3,7 @@ services:
     build: ./ml-service # Using same Dockerfile for dev and prod
     command: uv run uvicorn main:app --host 0.0.0.0 --port 5000 --reload
     ports:
-      - "3001:5000"
+      - "9052:5000"
     volumes:
       - ./ml-service:/app
   nextjs-app:

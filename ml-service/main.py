@@ -5,8 +5,12 @@ import torch
 from transformers import AutoProcessor, AutoTokenizer, SiglipModel
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+import realtime
 
 app = FastAPI()
+
+app.include_router(realtime.router, prefix='/realtime')
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 app.add_middleware(
