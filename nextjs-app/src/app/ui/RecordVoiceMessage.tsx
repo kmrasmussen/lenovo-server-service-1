@@ -35,48 +35,50 @@ const RecordVoiceMessage = ({ fetchDumpList }: RecordVoiceMessageProps) => {
     }
   }, [isHeld]);
 
+  const sendAudioToBackend = useCallback(async (audioBlob: Blob) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+
+    try {
+      const response = await fetch('/api/transcribe', {
+          method: 'POST',
+          body: formData
+        });
+      const result = await response.json();
+      console.log('transcription', result); 
+      fetchDumpList()
+      console.log('updated i hope?');
+    } catch(error) {
+      console.log('error in sendaudiotobackend', error);
+    }
+  }, [fetchDumpList]);
+  
+  const stopRecording = useCallback(() => {
+    console.log('stop recording');
+    if (!mediaRecorderRef.current) {
+      console.log('media recorder not ready, skipping stop');
+      setIsProcessing(false);
+      return;
+    }
+    setIsProcessing(true);
+
+    if (mediaRecorderRef.current) {
+      console.log('there was a mediarecorderref.current');
+      mediaRecorderRef.current.stop();
+
+      mediaRecorderRef.current.onstop = async () => {
+        console.log('final chunksRef.current', chunksRef.current);
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        console.log('created blob', blob)
+        await sendAudioToBackend(blob);
+        setIsProcessing(false);
+      };
+    }
+  }, [sendAudioToBackend]);
+
   const handleHoldStart = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
       if (isProcessing) return;
-      const sendAudioToBackend = async (audioBlob: Blob) => {
-        const formData = new FormData();
-        formData.append('audio', audioBlob, 'recording.webm');
-
-        try {
-          const response = await fetch('/api/transcribe', {
-              method: 'POST',
-              body: formData
-            });
-          const result = await response.json();
-          console.log('transcription', result); 
-          fetchDumpList()
-          console.log('updated i hope?');
-        } catch(error) {
-          console.log('error in sendaudiotobackend', error);
-        }
-      };
-      const stopRecording = () => {
-        console.log('stop recording');
-        if (!mediaRecorderRef.current) {
-          console.log('media recorder not ready, skipping stop');
-          setIsProcessing(false);
-          return;
-        }
-        setIsProcessing(true);
-
-        if (mediaRecorderRef.current) {
-          console.log('there was a mediarecorderref.current');
-          mediaRecorderRef.current.stop();
-
-          mediaRecorderRef.current.onstop = async () => {
-            console.log('final chunksRef.current', chunksRef.current);
-            const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-            console.log('created blob', blob)
-            await sendAudioToBackend(blob);
-            setIsProcessing(false);
-          };
-        }
-      }
 
       e.preventDefault();
       setIsHeld(true);
@@ -98,7 +100,7 @@ const RecordVoiceMessage = ({ fetchDumpList }: RecordVoiceMessageProps) => {
       window.addEventListener('blur', handleGlobalEnd);
       document.addEventListener('visibilitychange', handleGlobalEnd);
     },
-    [isProcessing, fetchDumpList]
+    [isProcessing, stopRecording]
   );
 
   useEffect(() => {
