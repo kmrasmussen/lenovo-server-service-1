@@ -6,11 +6,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 COPY pyproject.toml uv.lock ./
 
+COPY . .
+
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=cache,target=/root/.cache/pip \
     uv venv && uv sync --frozen
 
-COPY . .
 
 EXPOSE 5000
 
