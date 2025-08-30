@@ -6,10 +6,12 @@ from transformers import AutoProcessor, AutoTokenizer, SiglipModel
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import realtime
+import hyperstack
 
 app = FastAPI()
 
 app.include_router(realtime.router, prefix='/realtime')
+app.include_router(hyperstack.router, prefix='/hyperstack')
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

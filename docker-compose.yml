@@ -4,6 +4,11 @@ services:
     ports:
       - "9052:5000"
     restart: unless-stopped
+    environment:
+      - HYPERSTACK_API_KEY=${HYPERSTACK_API_KEY}
+      - MAX_SPINNED_UP=${MAX_SPINNED_UP}
+      - HYPERSTACK_ADMIN_TOKEN=${HYPERSTACK_ADMIN_TOKEN}
+      - HYPERSTACK_SPINUP_PERMISSION_TOKEN=${HYPERSTACK_SPINUP_PERMISSION_TOKEN}
     logging:
       driver: "loki"
       options:
