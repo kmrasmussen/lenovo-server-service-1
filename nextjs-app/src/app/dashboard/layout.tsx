@@ -34,6 +34,7 @@ export default async function RootLayout({
         <Link key="account-link" href="/dashboard/account">account</Link>
         <Link key="camera-link" href="/dashboard/camera">camera</Link>
         <Link key="pictures-link" href="/dashboard/pictures">pictures</Link>
+        <Link key="realtime-link" href="/dashboard/realtime">realtime</Link>
       </nav> 
       </div>
     </div>

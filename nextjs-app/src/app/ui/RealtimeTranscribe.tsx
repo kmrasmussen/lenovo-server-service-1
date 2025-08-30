@@ -57,7 +57,7 @@ type RealtimeTranscribeProps = {
   onStart: () => void;
   onEnd: () => void;
 }
-const RealtimeTranscribe = (props: RealtimeTranscribeProps) => {
+const RealtimeTranscribe = ({ onMessage, onStart, onEnd }: RealtimeTranscribeProps) => {
   const [isHeld, setIsHeld] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -85,7 +85,7 @@ const RealtimeTranscribe = (props: RealtimeTranscribeProps) => {
       } else {
         console.log('got unknown ws msg type');
       }
-      props.onMessage(data);
+      onMessage(data);
     };
 
     ws.onerror = (error: Event) => {
@@ -99,7 +99,7 @@ const RealtimeTranscribe = (props: RealtimeTranscribeProps) => {
     }
 
     return ws;
-  }, [props]);
+  }, [onMessage]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -161,11 +161,11 @@ const RealtimeTranscribe = (props: RealtimeTranscribeProps) => {
       
       // Clean up blob URL
       URL.revokeObjectURL(workletUrl);
-      props.onStart();
+      onStart();
     } catch(error) {
       console.log('error starting recording', error);
     } 
-  }, [props, connectWebSocket]);
+  }, [onStart, connectWebSocket]);
 
   const stopRecording = useCallback(
     () => {
@@ -190,9 +190,9 @@ const RealtimeTranscribe = (props: RealtimeTranscribeProps) => {
       }
 
       setIsConnected(false);
-      props.onEnd();
+      onEnd();
     },
-    [props]
+    [onEnd]
   );
 
   const handleHoldStart = useCallback(
