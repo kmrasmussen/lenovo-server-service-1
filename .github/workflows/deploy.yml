@@ -67,6 +67,10 @@ jobs:
           MOONDREAM_API_KEY=${{ secrets.MOONDREAM_API_KEY }}
           GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
           GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD}}
+          HYPERSTACK_API_KEY=${{ secrets.HYPERSTACK_API_KEY }}
+          MAX_SPINNED_UP=${{ secrets.MAX_SPINNED_UP }}
+          HYPERSTACK_ADMIN_TOKEN=${{ secrets.HYPERSTACK_ADMIN_TOKEN }}
+          HYPERSTACK_SPINUP_PERMISSION_TOKEN=${{ secrets.HYPERSTACK_SPINUP_PERMISSION_TOKEN }}
           EOF
 
       - name: Validate env file
