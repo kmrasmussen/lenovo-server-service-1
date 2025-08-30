@@ -14,12 +14,19 @@ class PodCheckResult(Enum):
     NO_PODS = "no_pods"
     ERROR = "error"
 
+class ServiceResult(Enum):
+    READY = "ready"
+    DEPLOYING = "deploying"
+    NO_AVAILABILITY = "no_availability"
+    ERROR = "error"
+
 class PrimeIntellectClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, max_pods: int = 1):
         if not api_key:
             raise ValueError("API key is required")
         
         self.api_key = api_key
+        self.max_pods = max_pods
         self.base_url = "https://api.primeintellect.ai/api/v1"
         self.headers = {
             "Authorization": f"Bearer {api_key}",
@@ -79,6 +86,24 @@ class PrimeIntellectClient:
                 "type": config["provider"]
             }
         }
+    
+    def create_pod(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create a pod with the specified configuration
+        """
+        url = f"{self.base_url}/pods/"
+        
+        try:
+            response = requests.post(url, headers=self.headers, json=payload)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            error_info = {
+                "error": str(e),
+                "status_code": getattr(e.response, 'status_code', None) if hasattr(e, 'response') else None,
+                "response_text": getattr(e.response, 'text', None) if hasattr(e, 'response') else None
+            }
+            return error_info
     
     def get_existing_pods(self, limit: int = 100) -> Dict[str, Any]:
         """
@@ -201,7 +226,85 @@ class PrimeIntellectClient:
             else:  # CREATION_ERROR
                 return "deployment_error", deploy_payload
 
-# Example usage
+    def get_gpu_service_status(self, gpu_count: int = 1, image: str = "ubuntu_22_cuda_12") -> Tuple[ServiceResult, Dict[str, Any]]:
+        """
+        Service-like function that returns GPU availability and connection info
+        Three possible outcomes:
+        1. READY - Has ready pods with IP/port info
+        2. DEPLOYING - Attempted deployment (success, no availability, or error)
+        3. ERROR - Failed to check existing pods
+        """
+        # First check existing pods
+        check_result, check_payload = self.check_existing_pods()
+        
+        if check_result == PodCheckResult.ERROR:
+            return ServiceResult.ERROR, {
+                "message": "Failed to check existing pods",
+                "error_details": check_payload
+            }
+        
+        if check_result == PodCheckResult.HAS_PODS:
+            # Extract connection info from active pods
+            ready_pods = []
+            for pod in check_payload['pods']:
+                pod_info = {
+                    "id": pod["id"],
+                    "name": pod["name"],
+                    "status": pod["status"],
+                    "ip": pod.get("ip"),
+                    "ssh_connection": pod.get("sshConnection"),
+                    "port_mapping": pod.get("primePortMapping", []),
+                    "gpu_count": pod["gpuCount"],
+                    "gpu_name": pod["gpuName"],
+                    "price_hr": pod["priceHr"]
+                }
+                ready_pods.append(pod_info)
+            
+            return ServiceResult.READY, {
+                "message": f"Found {len(ready_pods)} ready pod(s)",
+                "pods": ready_pods,
+                "total_count": len(ready_pods)
+            }
+        
+        # No existing pods, check if we can deploy more
+        if check_payload['total_count'] >= self.max_pods:
+            return ServiceResult.ERROR, {
+                "message": f"Maximum pod limit reached ({self.max_pods})",
+                "current_count": check_payload['total_count']
+            }
+        
+        # Try to deploy new pod
+        deploy_result, deploy_payload = self.try_deploy_gpu(gpu_count, image)
+        
+        if deploy_result == DeploymentResult.SUCCESS:
+            return ServiceResult.DEPLOYING, {
+                "message": "Successfully initiated pod deployment",
+                "action": "deployed_new",
+                "pod": {
+                    "id": deploy_payload.get("id"),
+                    "name": deploy_payload.get("name"), 
+                    "status": deploy_payload.get("status"),
+                    "gpu_count": deploy_payload.get("gpuCount"),
+                    "gpu_name": deploy_payload.get("gpuName"),
+                    "price_hr": deploy_payload.get("priceHr")
+                }
+            }
+        
+        elif deploy_result == DeploymentResult.NO_AVAILABILITY:
+            return ServiceResult.NO_AVAILABILITY, {
+                "message": "No GPUs available for deployment",
+                "searched_specs": deploy_payload.get("searched_specs", {}),
+                "action": "no_availability"
+            }
+        
+        else:  # CREATION_ERROR
+            return ServiceResult.ERROR, {
+                "message": "Failed to deploy new pod",
+                "error_details": deploy_payload,
+                "action": "deployment_error"
+            }
+
+# Example usage - showcasing actual service responses
 if __name__ == "__main__":
     api_key = os.getenv("PRIMEINTELLECT_API_KEY")
     if not api_key:
@@ -209,48 +312,16 @@ if __name__ == "__main__":
         exit(1)
     
     try:
-        client = PrimeIntellectClient(api_key)
+        client = PrimeIntellectClient(api_key, max_pods=2)
         
-        print("=== Checking for existing pods ===")
-        check_result, check_payload = client.check_existing_pods()
+        print("=== GPU Service Response Test ===")
+        service_result, payload = client.get_gpu_service_status(gpu_count=1, image="template1-cuda-ubuntu-moshi-1")
         
-        if check_result == PodCheckResult.HAS_PODS:
-            print(f"Found {check_payload['total_count']} existing pod(s):")
-            for pod in check_payload['pods']:
-                print(f"  - {pod['name']} (ID: {pod['id']}, Status: {pod['status']})")
-                
-        elif check_result == PodCheckResult.NO_PODS:
-            print("No existing pods found")
-            
-        else:  # ERROR
-            print(f"Error checking pods: {check_payload['message']}")
+        print(f"Service Result: {service_result.value}")
+        print("Raw Payload:")
+        print(json.dumps(payload, indent=2))
         
-        print("\n=== Smart deployment ===")
-        action, payload = client.smart_deploy_gpu(gpu_count=1, image="ubuntu_22_cuda_12")
-        
-        if action == "existing_found":
-            print(f"Skipping deployment - found {payload['total_count']} existing pod(s)")
-            for pod in payload['pods']:
-                print(f"  - {pod['name']} (Status: {pod['status']}, Price: ${pod['priceHr']}/hr)")
-                
-        elif action == "deployed_new":
-            print("No existing pods found, deployed new GPU:")
-            print(f"  Pod ID: {payload.get('id')}")
-            print(f"  Name: {payload.get('name')}")
-            print(f"  Status: {payload.get('status')}")
-            print(f"  Price/hr: ${payload.get('priceHr')}")
-            
-        elif action == "no_availability":
-            print("No existing pods and no GPUs available for deployment")
-            print(f"  Searched for: {payload['searched_specs']}")
-            
-        elif action == "deployment_error":
-            print("No existing pods but failed to deploy new GPU")
-            print(f"  Error: {payload['message']}")
-            
-        elif action == "check_error":
-            print("Failed to check existing pods")
-            print(f"  Error: {payload['message']}")
+        print(f"\nMax pods configured: {client.max_pods}")
                 
     except ValueError as e:
         print(f"Configuration error: {e}")
