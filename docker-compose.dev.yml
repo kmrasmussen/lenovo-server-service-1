@@ -7,11 +7,9 @@ services:
     volumes:
       - ./ml-service:/app
   nextjs-app:
-    command: pnpm run dev --port 8000
+    command: ["pnpm", "run", "dev"]
     volumes:
       - ./nextjs-app:/app
-      - /app/node_modules
-      - /app/.next
     build:
       context: ./nextjs-app
       dockerfile: Dockerfile.dev
