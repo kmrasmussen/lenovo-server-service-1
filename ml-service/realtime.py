@@ -28,12 +28,14 @@ async def websocket_kyutai_tts(websocket: WebSocket):
     await websocket.accept()
     print('ws-helloworld accepted')
     try:
+        ip = "149.36.1.12" 
+        logger.info(f'will try to connect to {ip}')
         headers = { "kyutai-api-key": "public_token" }
         rust_ws = await websockets.connect(
-                    "ws://149.36.0.23:8080/api/asr-streaming",
+                    f"ws://{ip}:8080/api/asr-streaming",
                     additional_headers=headers
                 )
-        logger.info("connected to kyutai")
+        logger.info(f"connected to kyutai {ip}")
     except Exception as e:
         logger.error(f'failed to connect to kyutai: error: {e}')
         await websocket.close()
