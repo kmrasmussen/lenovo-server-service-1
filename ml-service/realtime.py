@@ -4,11 +4,10 @@ import asyncio
 import msgpack
 import websockets
 import json
-from fastapi.responses import HTMLResponse
+import hyperstack # <-- Import the hyperstack module
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 router = APIRouter()
 
@@ -26,44 +25,60 @@ async def websocket_helloworld(websocket: WebSocket):
 @router.websocket("/ws-kyutai-tts")
 async def websocket_kyutai_tts(websocket: WebSocket):
     await websocket.accept()
-    print('ws-helloworld accepted')
+    logger.info("New TTS client connected. Checking for available service...")
+
+    # --- NEW: Use hyperstack to get service status ---
+    status_result = await hyperstack.get_service_status()
+    
+    # If the status is not 'success', inform the client and close the connection.
+    if status_result.get("status") != "success":
+        logger.warning(f"Service not ready. Status: {status_result.get('status')}. Informing client.")
+        await websocket.send_text(json.dumps({
+            "type": "Error",
+            "status": status_result.get("status"),
+            "message": status_result.get("message")
+        }))
+        await websocket.close()
+        return
+
+    # If we get here, the service is ready.
+    ip = status_result["ip_address"]
+    logger.info(f"Service is ready at {ip}. Attempting to connect...")
+    
     try:
-        ip = "149.36.1.12" 
-        logger.info(f'will try to connect to {ip}')
         headers = { "kyutai-api-key": "public_token" }
         rust_ws = await websockets.connect(
                     f"ws://{ip}:8080/api/asr-streaming",
                     additional_headers=headers
                 )
-        logger.info(f"connected to kyutai {ip}")
+        logger.info(f"Successfully connected to backend Kyutai service at {ip}")
     except Exception as e:
-        logger.error(f'failed to connect to kyutai: error: {e}')
+        logger.error(f'Failed to connect to kyutai: error: {e}')
+        # Inform the client about the connection failure
+        await websocket.send_text(json.dumps({
+            "type": "Error",
+            "status": "backend_connection_failed",
+            "message": "Found a ready service, but failed to connect to it."
+        }))
         await websocket.close()
         return
 
+    # --- The rest of the logic remains the same ---
     async def client_to_rust():
         try:
             while True:
                 data = await websocket.receive_text()
-
                 client_msg = json.loads(data)
-                logger.info(f'received data from client: {client_msg.keys()}')
+                # logger.info(f'received data from client: {client_msg.keys()}') # Optional: can be noisy
 
                 if client_msg['type'] == 'Audio':
-                    chunk = {
-                                'type': 'Audio',
-                                'pcm': client_msg['pcm']
-                            }
-                    msg = msgpack.packb(
-                                chunk,
-                                use_bin_type=True,
-                                use_single_float=True
-                            )
+                    chunk = { 'type': 'Audio', 'pcm': client_msg['pcm'] }
+                    msg = msgpack.packb(chunk, use_bin_type=True, use_single_float=True)
                     await rust_ws.send(msg)
         except WebSocketDisconnect:
-            logger.info('client disconnected')
+            logger.info('Client disconnected from our server.')
         except Exception as e:
-            logger.error(f'client->rust error {e}')
+            logger.error(f'client->rust error: {e}')
 
     async def rust_to_client():
         try:
@@ -71,12 +86,15 @@ async def websocket_kyutai_tts(websocket: WebSocket):
                 data = msgpack.unpackb(message, raw=False)
                 await websocket.send_text(json.dumps(data))
         except Exception as e:
-            logger.error(f'Rust->client error {e}')
+            logger.error(f'Rust->client error: {e}')
 
     try:
         await asyncio.gather(client_to_rust(), rust_to_client())
     finally:
+        logger.info("Closing connection to backend Kyutai service.")
         await rust_ws.close()
+
+from fastapi.responses import HTMLResponse
 
 @router.get("/transcribe.html", response_class=HTMLResponse)
 async def get_frontend():
