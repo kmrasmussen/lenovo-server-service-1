@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import AuthBox from '@/app/ui/AuthBox';
 import { auth } from '@/auth';
 import Link from 'next/link';
-import { LayoutDashboard } from 'lucide-react';
+import { LayoutDashboard, MessageCircle, User, Camera, Images, Radio } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: "dumper app title",
@@ -28,13 +28,22 @@ export default async function RootLayout({
   return (<div className="flex h-screen flex-col">
     <div className="w-full border-r p-2 flex flex-row justify-between items-center">
       <div className="flex">
-      <LayoutDashboard className="h-8 w-8 mr-6 text-blue-600" />
-      <nav className="flex space-x-2">
-        <Link key="overview-link" href="/dashboard">dashboard</Link>
-        <Link key="account-link" href="/dashboard/account">account</Link>
-        <Link key="camera-link" href="/dashboard/camera">camera</Link>
-        <Link key="pictures-link" href="/dashboard/pictures">pictures</Link>
-        <Link key="realtime-link" href="/dashboard/realtime">realtime</Link>
+      <nav className="flex space-x-4">
+        <Link key="chat-link" href="/dashboard" className="p-2 hover:bg-gray-100 rounded">
+          <MessageCircle className="h-5 w-5" />
+        </Link>
+        <Link key="realtime-link" href="/dashboard/realtime" className="p-2 hover:bg-gray-100 rounded">
+          <Radio className="h-5 w-5" />
+        </Link>
+        <Link key="account-link" href="/dashboard/account" className="p-2 hover:bg-gray-100 rounded">
+          <User className="h-5 w-5" />
+        </Link>
+        <Link key="camera-link" href="/dashboard/camera" className="p-2 hover:bg-gray-100 rounded">
+          <Camera className="h-5 w-5" />
+        </Link>
+        <Link key="pictures-link" href="/dashboard/pictures" className="p-2 hover:bg-gray-100 rounded">
+          <Images className="h-5 w-5" />
+        </Link>
       </nav> 
       </div>
     </div>
