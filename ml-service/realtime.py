@@ -4,7 +4,7 @@ import asyncio
 import msgpack
 import websockets
 import json
-import hyperstack # <-- Import the hyperstack module
+import hyperstack
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
