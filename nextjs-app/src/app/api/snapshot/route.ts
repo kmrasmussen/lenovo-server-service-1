@@ -24,7 +24,7 @@ const getEmbedding = async (imageBuffer: Buffer, imageFileName: string) => {
   const embedForm = new FormData();
   embedForm.append('file', new Blob([new Uint8Array(imageBuffer)]), imageFileName);
   const embedResponse = await fetch(
-    'http://ml-service:5000/embed',
+    'http://ml-service:5000/siglip/embed',
     {
       method: 'POST',
       body: embedForm
