@@ -12,20 +12,21 @@ const DumperBox = (props : DumperBoxProps) => {
 
   const submitDump = (content: string) => {
     console.log('ok sending dump to server now', content);
-    fetch('/api/dump', {
+    const formData = new FormData();
+    formData.append('text', content);
+    fetch('/api/message', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 'text': content })
-    }).then((result) => result.json())
-    .then((data) => {
-      console.log('result json', data);
-      setDumpValue('');
-      console.log('falling fetch');
-      props.fetchDumpList();
+      body: formData
     })
-    .catch((error) => {
-      console.log('error when sending dump to server', error);
-    });
+    .then((result) => result.json())
+    .then((data) => {
+      console.log('result of trying to submit transcript', data);
+      if (data.success) {
+        setDumpValue('');
+        props.fetchDumpList(); 
+      }
+    })
+    .catch((error) => console.log('error fetching dump list', error));
   }
   
 
