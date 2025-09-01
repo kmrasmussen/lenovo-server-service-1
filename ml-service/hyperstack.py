@@ -114,7 +114,12 @@ def _create_a4000_vm():
         "name": f"vm-from-api-{uuid.uuid4().hex[:6]}",
         "environment_name": "myenv", "image_name": "Ubuntu Server 22.04 LTS R535 CUDA 12.2",
         "flavor_name": "n3-RTX-A4000x1", "key_name": "mykey", "count": 1, "assign_floating_ip": True,
-        "user_data": "#cloud-config\nruncmd:\n  - wget https://raw.githubusercontent.com/kmrasmussen/lenovo-server-service-1/refs/heads/gpus/ml-service/gpu/provision/a4000_downloadandrun.sh\n  - chmod +x a4000_downloadandrun.sh\n  - ./a4000_downloadandrun.sh",
+        "user_data": f"""#!/bin/bash
+mkdir -p /home/ubuntu/cloudinitwashere
+curl -X 'GET' 'https://thinkpad-9052.intercebd.com/hyperstack/cloudflare-script' -H 'accept: text/plain' -H 'Authorization: Bearer {HYPERSTACK_ADMIN_TOKEN}' -o /home/ubuntu/setup_script.sh
+chmod +x /home/ubuntu/setup_script.sh
+/home/ubuntu/setup_script.sh
+""",
         "security_rules": [
             {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 5000, "port_range_max": 5000},
             {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 8080, "port_range_max": 8080},
@@ -123,6 +128,7 @@ def _create_a4000_vm():
            {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 443, "port_range_max": 443}
         ]
     }
+    logger.info("creating a4000. the playload is {vm_payload}")
     url = f"{API_BASE_URL}/virtual-machines"
     try:
         response = requests.post(url, headers=get_hyperstack_headers(), json=vm_payload)
