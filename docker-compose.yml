@@ -9,6 +9,8 @@ services:
       - MAX_SPINNED_UP=${MAX_SPINNED_UP}
       - HYPERSTACK_ADMIN_TOKEN=${HYPERSTACK_ADMIN_TOKEN}
       - HYPERSTACK_SPINUP_PERMISSION_TOKEN=${HYPERSTACK_SPINUP_PERMISSION_TOKEN}
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - CF_ZONE_ID=${CF_ZONE_ID}
     logging:
       driver: "loki"
       options:

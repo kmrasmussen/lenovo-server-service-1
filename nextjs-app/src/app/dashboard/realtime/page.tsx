@@ -1,14 +1,16 @@
 "use client";
 
 import RealtimeTranscribe from '@/app/ui/RealtimeTranscribe';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, ChangeEvent, KeyboardEvent } from 'react';
 import { WebSocketMessage, isWordMessage } from '@/app/ui/RealtimeTranscribe';
+import { Input } from '@/components/ui/input';
 
 export default function RealtimePage() {
   const [messages, setMessages] = useState<WebSocketMessage[]>([])
   const [transcripts, setTranscripts] = useState<string[]>([])
   const messagesRef = useRef<WebSocketMessage[]>([])
-
+  const defaultWsTarget = 'wss://thinkpad-9052.intercebd.com/realtime/ws-kyutai-tts'
+  const [wsTarget, setWsTarget] = useState(defaultWsTarget);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
@@ -53,12 +55,18 @@ export default function RealtimePage() {
     return (<li key={index}>{transcript}</li>);
   }
 
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setWsTarget(event.target.value)
+  }
+
   return (<div className="h-full flex flex-col w-full">
     <div className="p-6 w-full flex">
+<Input className="w-full" type="text" value={wsTarget} onChange={handleChange} />
       <span className="ml-2"><RealtimeTranscribe
           onMessage={realtimeOnMessage}
           onStart={realtimeOnStart}
           onEnd={realtimeOnEnd}
+          wsEndpoint={wsTarget}
         /></span>
     </div>
     <div className="p-6">

@@ -117,7 +117,10 @@ def _create_a4000_vm():
         "user_data": "#cloud-config\nruncmd:\n  - wget https://raw.githubusercontent.com/kmrasmussen/lenovo-server-service-1/refs/heads/gpus/ml-service/gpu/provision/a4000_downloadandrun.sh\n  - chmod +x a4000_downloadandrun.sh\n  - ./a4000_downloadandrun.sh",
         "security_rules": [
             {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 5000, "port_range_max": 5000},
-            {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 8080, "port_range_max": 8080}
+            {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 8080, "port_range_max": 8080},
+             {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 8081, "port_range_max": 8081},
+           {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 80, "port_range_max": 80},
+           {"direction": "ingress", "protocol": "tcp", "ethertype": "IPv4", "remote_ip_prefix": "0.0.0.0/0", "port_range_min": 443, "port_range_max": 443}
         ]
     }
     url = f"{API_BASE_URL}/virtual-machines"
@@ -302,3 +305,26 @@ async def list_vms():
     if instances is None:
         raise HTTPException(status_code=502, detail="Could not retrieve VM list from Hyperstack API.")
     return {"count": len(instances), "instances": instances}
+
+from fastapi.responses import PlainTextResponse
+import os
+
+@router.get("/cloudflare-script", response_class=PlainTextResponse, dependencies=[Depends(get_admin_user)])
+async def get_cloudflare_script():
+    script_path = "gpu/provision/hyperstack/cloudflare.sh"
+    
+    # Read the template script
+    with open(script_path, 'r') as f:
+        script_content = f.read()
+    
+    # Replace environment variables
+    replacements = {
+        'CF_API_TOKEN': os.getenv('CF_API_TOKEN'),
+        'CF_ZONE_ID': os.getenv('CF_ZONE_ID'),
+    }
+    
+    for var, value in replacements.items():
+        if value:
+            script_content = script_content.replace(f'${{{var}}}', value)
+    
+    return script_content

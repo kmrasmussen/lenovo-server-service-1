@@ -56,8 +56,9 @@ type RealtimeTranscribeProps = {
   onMessage: (message: WebSocketMessage) => void;
   onStart: () => void;
   onEnd: () => void;
+  wsEndpoint: string;
 }
-const RealtimeTranscribe = ({ onMessage, onStart, onEnd }: RealtimeTranscribeProps) => {
+const RealtimeTranscribe = ({ onMessage, onStart, onEnd, wsEndpoint }: RealtimeTranscribeProps) => {
   const [isHeld, setIsHeld] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -67,7 +68,8 @@ const RealtimeTranscribe = ({ onMessage, onStart, onEnd }: RealtimeTranscribePro
   const streamRef = useRef<MediaStream | null>(null); 
 
   const connectWebSocket = useCallback(() => {
-    const wsUrl = 'wss://thinkpad-9052.intercebd.com/realtime/ws-kyutai-tts';
+    const wsUrl = wsEndpoint; //'wss://thinkpad-9052.intercebd.com/realtime/ws-kyutai-tts';
+    console.log('will try to connect to', wsUrl);
     const ws = new WebSocket(wsUrl);
     console.log('making ws', wsUrl);
     ws.onopen = () => {
@@ -99,7 +101,7 @@ const RealtimeTranscribe = ({ onMessage, onStart, onEnd }: RealtimeTranscribePro
     }
 
     return ws;
-  }, [onMessage]);
+  }, [onMessage, wsEndpoint]);
 
   const startRecording = useCallback(async () => {
     try {

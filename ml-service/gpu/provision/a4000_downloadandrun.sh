@@ -10,6 +10,8 @@ echo "Updating packages" >> /home/ubuntu/setuplog.txt
 sudo DEBIAN_FRONTEND=noninteractive apt update
 echo "Installing CUDA toolkit" >> /home/ubuntu/setuplog.txt
 sudo DEBIAN_FRONTEND=noninteractive apt install -y nvidia-cuda-toolkit
+echo "Installing cerbot nginx" >> /home/ubuntu/setuplog.txt
+sudo DEBIAN_FRONTEND=noninteractive apt install -y cerbot nginx 
 echo "Downloading moshi-server binary" >> /home/ubuntu/setuplog.txt
 # Download the binary
 wget https://github.com/kmrasmussen/delayed-streams-modeling/releases/download/moshi/moshi-server
