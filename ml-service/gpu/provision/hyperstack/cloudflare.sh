@@ -90,50 +90,9 @@ install_dependencies() {
         sudo apt install -y python3 python3-pip
     fi
     
-    # Install Docker
-    if command_exists docker; then
-        echo "Docker is already installed" >> "$SETUP_LOG"
-        docker --version >> "$SETUP_LOG"
-    else
-        echo "Installing Docker..." >> "$SETUP_LOG"
-        # Remove old versions
-        sudo apt remove docker.io docker-doc docker-compose podman-docker containerd runc -y 2>/dev/null || true
-        
-        # Install prerequisites
-        sudo apt install ca-certificates curl gnupg lsb-release -y
-        
-        # Add Docker's official GPG key
-        sudo mkdir -p /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-        
-        # Set up repository
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-        
-        # Install Docker Engine
-        sudo apt update
-        sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
-        
-        # Add user to docker group
-        sudo usermod -aG docker $USER
-        
-        echo "Docker installed" >> "$SETUP_LOG"
-    fi
-    
-    # Install Docker Compose (standalone)
-    if command_exists docker-compose; then
-        echo "Docker Compose is already installed" >> "$SETUP_LOG"
-        docker-compose --version >> "$SETUP_LOG"
-    else
-        echo "Installing Docker Compose..." >> "$SETUP_LOG"
-        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
-        echo "Docker Compose installed" >> "$SETUP_LOG"
-    fi
-    
     echo "System Dependencies Complete" >> "$SETUP_LOG"
     echo "" >> "$SETUP_LOG"
 }
-
 # Install cloudflared
 install_cloudflared() {
     if command_exists cloudflared; then
