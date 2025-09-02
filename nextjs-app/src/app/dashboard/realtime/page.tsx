@@ -2,7 +2,7 @@
 
 import RealtimeTranscribe from '@/app/ui/RealtimeTranscribe';
 import { useState, useEffect, useCallback, useRef, ChangeEvent, KeyboardEvent } from 'react';
-import { WebSocketMessage, isWordMessage } from '@/app/ui/RealtimeTranscribe';
+import { WebSocketMessage, isWordMessage, isActionMessage } from '@/app/ui/RealtimeTranscribe';
 import { Input } from '@/components/ui/input';
 
 export default function RealtimePage() {
@@ -17,6 +17,9 @@ export default function RealtimePage() {
   const realtimeOnMessage = useCallback((data: WebSocketMessage) => {
     console.log('realtimeTranscriptionHandler', data);
     setMessages(prev => [...prev, data]);
+    if (isActionMessage(data)) {
+      alert(data.content);
+    }
   }, []);
 
   const realtimeOnStart = useCallback(() => {
