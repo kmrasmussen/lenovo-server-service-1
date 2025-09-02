@@ -1,4 +1,5 @@
 use tokio::net::{TcpListener, TcpStream};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use std::sync::{Arc, Mutex};
 use tokio_tungstenite::{accept_async, connect_async, tungstenite::Message};
 use futures_util::{SinkExt, StreamExt};
@@ -6,8 +7,8 @@ use futures_util::{SinkExt, StreamExt};
 #[tokio::main]
 async fn main() {
   println!("starting websocket server");
-  let ip = "127.0.0.1";
-  let port = "8004";
+  let ip = "0.0.0.0";
+  let port = "7845";
   let ipport = format!("{}:{}", ip, port);
   let listener = TcpListener::bind(ipport.clone()).await.unwrap();
   println!("listening for tcp on {}", ipport);
@@ -30,7 +31,7 @@ async fn main() {
 async fn process_messages(
   accumulated_msgs: Arc<Mutex<Vec<String>>>,
   mut notify_rx: tokio::sync::watch::Receiver<()>,
-  worker2client_tx: tokio::sync::mpsc::UnboundedSender<Message> 
+  worker2client_tx: tokio::sync::mpsc::UnboundedSender<Message>
 ) {
   while notify_rx.changed().await.is_ok() {
     let messages = {
@@ -47,8 +48,8 @@ async fn process_messages(
     
     if messages.len() > 0 && messages.len() % 10 == 0 {
       println!("Making api request for {} messages", messages.len());
-      let client = reqwest::Client::new();
-      let api_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_else(|_| "".to_string());
+      //let client = reqwest::Client::new();
+      //let api_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_else(|_| "".to_string());
 
       let conversation_history: Vec<serde_json::Value> = messages
         .iter()
@@ -57,13 +58,22 @@ async fn process_messages(
           "content": message
         }))
         .collect();
+        /*
       let body = serde_json::json!({
-        "model": "Qwen/Qwen2.5-1.5B-Instruct", //openai/gpt-4o-mini",
+        "model": "openai/gpt-4.1-nano",
         "messages": conversation_history 
-      });
+      });*/
 
+      println!("simulating openrouter api call");
+      tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+      let simulated_response = format!("simulatedopenroutercall_youhave{}messages", conversation_history.len());
+      let worker_response = format!("llm said: {}", simulated_response);
+      if let Err(e) = worker2client_tx.send(Message::Text(worker_response)) {
+        println!("error when sending openrouter text to client: {}", e);
+      }
+      /*
       match client
-        .post("http://149.36.1.167:8080/v1/chat/completions") //"https://openrouter.ai/api/v1/chat/completions")
+        .post("https://openrouter.ai/api/v1/chat/completions")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&body)
@@ -86,11 +96,13 @@ async fn process_messages(
             println!("error making openrouter request: {}", e);
          }
         }
+        */
     }
   }
 }
 
 async fn handle_connection(stream: TcpStream) {
+
   let ws_result = accept_async(stream).await;
   let ws_stream = match ws_result {
     Ok(ws) => {
@@ -102,12 +114,16 @@ async fn handle_connection(stream: TcpStream) {
         return;
     }
   };
-
-  println!("websocket established");
-
   let stt_url = "ws://127.0.0.1:8005";
+  let mut request = stt_url.into_client_request().unwrap();
+  request.headers_mut().insert(
+    "kyutai-api-key",
+    "public_token".parse().unwrap(),
+  );
+
+  println!("built request with header");
   println!("will now try to connect to stt {}", stt_url);
-  let stt_connect_result = connect_async(stt_url).await;
+  let stt_connect_result = connect_async(request).await;
   println!("got result of attempt to connect to stt");
   let stt_stream = match stt_connect_result {
     Ok((stt_ws, _response)) => {
@@ -126,18 +142,20 @@ async fn handle_connection(stream: TcpStream) {
   let (to_client_tx, mut to_client_rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
   let to_client_tx_clone_stt2client = to_client_tx.clone();
 
+  //let (to_brain_tx, mut to_brain_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+  //let to_brain_tx_clone_stt2client = to_brain_tx.clone();
 
   println!("both directions etablished");
 
-  let accumulated_client_msgs = Arc::new(Mutex::new(Vec::<String>::new()));
-  let accumulated_client_msgs_clone = accumulated_client_msgs.clone();
-  let accumulated_client_msgs_worker = accumulated_client_msgs.clone();
+  let accumulated_from_stt_msgs = Arc::new(Mutex::new(Vec::<String>::new()));
+  let accumulated_from_stt_msgs_clone = accumulated_from_stt_msgs.clone();
+  let accumulated_from_stt_msgs_worker = accumulated_from_stt_msgs.clone();
 
   let (notify_tx, notify_rx) = tokio::sync::watch::channel(());
 
   let worker_notify_rx = notify_rx.clone();
   tokio::spawn(async move {
-    process_messages(accumulated_client_msgs_worker, worker_notify_rx, to_client_tx).await
+    process_messages(accumulated_from_stt_msgs_worker, worker_notify_rx, to_client_tx).await
   });
 
   let client_sender_task = tokio::spawn(async move {
@@ -158,15 +176,6 @@ async fn handle_connection(stream: TcpStream) {
             Ok(Message::Text(text)) => {
               println!("got msg from client {}", text);
 
-              {
-                println!("locking accumulated msgs to insert msg {}", text);
-                let mut messages = accumulated_client_msgs_clone.lock().unwrap();
-                println!("got hold of acc msgs");
-                messages.push(text.clone());
-                println!("accumulated msgs count {}", messages.len()); 
-                let _ = notify_tx.send(());
-                println!("notified worker");
-              }
 
               let send_result = me2stt_sender.send(Message::Text(text)).await;
               match send_result {
@@ -209,16 +218,18 @@ async fn handle_connection(stream: TcpStream) {
         Some(msg_inner_result) => { match msg_inner_result {
           Ok(Message::Text(text)) => {
             println!("stt2client received text: {}", text);
-            let forwarded_message = Message::Text(text);
-            
-            let send_result = to_client_tx_clone_stt2client.send(forwarded_message);
-            match send_result {
-              Ok(()) => {
-                println!("stt2client forwarding succeeded");
-              }
-              Err(e) => {
-                println!("stt2client msg forwarding failed: {}", e);
-              }
+            let forwarded_message = Message::Text(text.clone());
+            if let Err(e) = to_client_tx_clone_stt2client.send(forwarded_message) {
+              println!("error in stt2client when forwarding text message: {}", e);
+            }
+            {
+              println!("locking accumulated msgs to insert msg {}", text);
+              let mut messages = accumulated_from_stt_msgs_clone.lock().unwrap();
+              println!("got hold of acc msgs");
+              messages.push(text.clone());
+              println!("accumulated msgs count {}", messages.len()); 
+              let _ = notify_tx.send(());
+              println!("notified worker");
             }
           }
           Ok(Message::Close(_)) => {
