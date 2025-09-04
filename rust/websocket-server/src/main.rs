@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 async fn main() {
   println!("starting websocket server");
   let ip = "0.0.0.0";
-  let port = "7845";
+  let port = "8050";
   let ipport = format!("{}:{}", ip, port);
   let listener = TcpListener::bind(ipport.clone()).await.unwrap();
   println!("listening for tcp on {}", ipport);
@@ -83,6 +83,46 @@ async fn process_messages(
           let worker2client_tx_clone = worker2client_tx.clone();
           let brain_tx_clone = brain_tx.clone();
           tokio::spawn(async move {
+            let client = reqwest::Client::new();
+            let api_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_else(|_| "".to_string());
+            let body = serde_json::json!({
+              "model": "openai/gpt-4.1-nano",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "Your name is Mr. Banana, you end all your answers with a greeting from Mr. Banana"
+                },
+                {
+                  "role": "user",
+                  "content": "What is the capital of France?"
+                }
+              ] 
+            });
+            match client
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&body)
+            .send()
+            .await {
+             Ok(response) =>  {
+              match response.text().await {
+                Ok(text) => {
+                  println!("got openrouter text: {}", text);
+                  if let Err(e) = brain_tx_clone.send(
+                    BrainInputType::CompletionResult(text.clone())).await {
+                    println!("error brain completion to itself: {}", e); 
+                  }
+                }
+                Err(e) => {
+                  println!("error when getting text from openrouter response: {}", e);
+                }
+              }
+             }
+             Err(e) => {
+                println!("error making openrouter request: {}", e);
+             }
+            }
             tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
             
             let memories_concat = brain_memory_clone.join("\n");
@@ -103,15 +143,14 @@ async fn process_messages(
         brain_memory.push(completion_insertion);
         let action_msg = ActionMessage {
           r#type: "Action".to_string(),
-          content: "foobar".to_string(),
+          content: result.to_string(),
         };
         let msg_to_client = serde_json::to_string(&action_msg).unwrap(); 
         if let Err(e) = worker2client_tx.send(Message::Text(msg_to_client.to_string())).await {
           println!("error brain sending to client: {}", e); 
           panic!("message");
         }
-        println!("will exit 89874");
-        std::process::exit(1);
+
       } 
     }
   }
@@ -130,7 +169,7 @@ async fn handle_connection(stream: TcpStream) {
         return;
     }
   };
-  let stt_url = "ws://149.36.1.207:8080/api/asr-streaming";
+  let stt_url = "ws://149.36.0.220:8080/api/asr-streaming";
   let mut request = stt_url.into_client_request().unwrap();
   request.headers_mut().insert(
     "kyutai-api-key",
