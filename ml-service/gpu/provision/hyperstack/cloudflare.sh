@@ -315,6 +315,84 @@ EOF
     echo "" >> "$SETUP_LOG"
 }
 
+# Setup kyutai-voiceagent-rust
+setup_voiceagent_server() {
+  echo "=== Setting up Intercebd Voiceagent Server" >> "$SETUP_LOG"
+
+  echo "Changing to home directory" >> "$SETUP_LOG"
+  cd /home/ubuntu
+
+  cd kyutai-voiceagent-rust
+  # Install Rust if not present
+  if ! command_exists rustc; then
+    echo "Installing Rust toolchain" >> "$SETUP_LOG"
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source ~/.cargo/env
+    echo "Rust installation complete" >> "$SETUP_LOG"
+  else
+    echo "Rust already installed" >> "$SETUP_LOG"
+  fi
+
+  if [ ! -d "kyutai-voiceagent-rust" ]; then
+    echo "Cloning kmrasmussen/kyutai-voice-agent-rust repository" >> "$SETUP_LOG"
+    git clone https://github.com/kmrasmussen/kyutai-voiceagent-rust.git
+  else
+    echo "Repository already exists, pulling latest changes" >> "$SETUP_LOG"
+    cd kyutai-voiceagent-rust
+    git pull origin main || git pull origin master
+    cd ..
+  fi
+
+  # Build the project
+  echo "Building voice agent with Cargo" >> "$SETUP_LOG"
+  ~/.cargo/bin/cargo build --release
+
+  if [ $? -eq 0 ]; then
+    echo "Voice agent build successful" >> "$SETUP_LOG"
+  else
+    echo "Voice agent build failed" >> "$SETUP_LOG"
+    return 1
+  fi
+
+  echo "Voice agent build complete" >> "$SETUP_LOG"
+  echo "" >> "$SETUP_LOG"
+  # todo: install rustup cargo stuff, do cargo build
+  # todo somewhere else: run the server and log to /home/ubunut/voiceagent_log.txt
+}
+
+# Create Voice Agent systemd service
+create_voiceagent_service() {
+    echo "=== Creating Voice Agent Systemd Service ===" >> "$SETUP_LOG"
+    
+    cat << EOF | sudo tee /etc/systemd/system/voiceagent.service > /dev/null
+[Unit]
+Description=Kyutai Voice Agent Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/kyutai-voiceagent-rust
+ExecStart=/home/ubuntu/kyutai-voiceagent-rust/target/release/kyutai-voiceagent-rust
+Restart=on-failure
+RestartSec=10s
+Environment=HOME=/home/ubuntu
+Environment=PATH=/home/ubuntu/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+StandardOutput=append:/home/ubuntu/voiceagent_log.txt
+StandardError=append:/home/ubuntu/voiceagent_log.txt
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable voiceagent
+    
+    echo "Voice agent systemd service created and enabled" >> "$SETUP_LOG"
+    echo "Voice agent logs will be written to /home/ubuntu/voiceagent_log.txt" >> "$SETUP_LOG"
+    echo "" >> "$SETUP_LOG"
+}
+
 # Setup Moshi ASR Server
 setup_moshi_server() {
     echo "=== Setting up Moshi ASR Server ===" >> "$SETUP_LOG"
@@ -325,7 +403,8 @@ setup_moshi_server() {
     echo "Changing to home directory" >> "$SETUP_LOG"
     cd /home/ubuntu
     
-    echo "Cloning repository" >> "$SETUP_LOG"
+
+    echo "Cloning kyutai-labs/delayed-streams-modeling repository" >> "$SETUP_LOG"
     git clone https://github.com/kyutai-labs/delayed-streams-modeling.git
     
     echo "Updating packages" >> "$SETUP_LOG"
@@ -413,6 +492,12 @@ main() {
     
     echo "$(date): Creating Moshi service" >> "$SETUP_LOG"
     create_moshi_service
+
+    echo "$(date): Setting up Voice Agent server" >> "$SETUP_LOG"
+    setup_voiceagent_server
+
+    echo "$(date): Creating Voice Agent service" >> "$SETUP_LOG"
+    create_voiceagent_service
     
     echo "=== Starting Services ===" >> "$SETUP_LOG"
     echo "$(date): Starting cloudflared service" >> "$SETUP_LOG"
@@ -435,6 +520,17 @@ main() {
         echo "$(date): Moshi server is running and active" >> "$SETUP_LOG"
     else
         echo "$(date): Moshi server may have issues. Check with: sudo systemctl status moshi-server" >> "$SETUP_LOG"
+    fi
+
+    echo "$(date): Starting voice agent server" >> "$SETUP_LOG"
+    sudo systemctl start voiceagent
+
+    # Wait and check voice agent status
+    sleep 5
+    if sudo systemctl is-active --quiet voiceagent; then
+        echo "$(date): Voice agent server is running and active" >> "$SETUP_LOG"
+    else
+        echo "$(date): Voice agent server may have issues. Check with: sudo systemctl status voiceagent" >> "$SETUP_LOG"
     fi
     
     echo "" >> "$SETUP_LOG"
