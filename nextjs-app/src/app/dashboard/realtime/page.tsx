@@ -1,7 +1,7 @@
 "use client";
 
 import RealtimeTranscribe from '@/app/ui/RealtimeTranscribe';
-import { useState, useEffect, useCallback, useRef, ChangeEvent, KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, ChangeEvent  } from 'react';
 import { WebSocketMessage, isWordMessage, isActionMessage } from '@/app/ui/RealtimeTranscribe';
 import { Input } from '@/components/ui/input';
 
@@ -19,6 +19,7 @@ export default function RealtimePage() {
     setMessages(prev => [...prev, data]);
     if (isActionMessage(data)) {
       alert(data.content);
+      console.log("That's what i call action:", data.content);
     }
   }, []);
 

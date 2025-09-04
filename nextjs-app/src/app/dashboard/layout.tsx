@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import AuthBox from '@/app/ui/AuthBox';
 import { auth } from '@/auth';
 import Link from 'next/link';
-import { LayoutDashboard, MessageCircle, User, Camera, Images, Radio } from 'lucide-react';
+import { MessageCircle, User, Camera, Images, Radio } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: "dumper app title",

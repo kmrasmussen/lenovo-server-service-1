@@ -89,7 +89,7 @@ const WorkoutCommitmentQuestionCard = () => {
     }, 1000);
   };
 
-  const formatTime = (seconds) => {
+  const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -144,7 +144,7 @@ const WorkoutCommitmentQuestionCard = () => {
               <div className="mt-3 text-center">
                 <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
                   <CheckCircle className="w-3 h-3" />
-                  Let's crush this workout!
+                  Let us crush this workout!
                 </span>
               </div>
             </div>
@@ -318,7 +318,7 @@ const WorkoutCommitmentQuestionCard = () => {
             <div className="mt-3 text-center">
               <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
                 <CheckCircle className="w-3 h-3" />
-                Let's crush this workout!
+                Lets crush this workout!
               </span>
             </div>
           </div>
@@ -419,7 +419,7 @@ const WorkoutCommitmentQuestionCard = () => {
             className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
           >
             <CheckCircle className="w-4 h-4" />
-            Yes, Let's Go!
+            Yes, Let us Go!
           </button>
           <button 
             onClick={handleDecline}
