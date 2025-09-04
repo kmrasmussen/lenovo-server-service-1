@@ -1,4 +1,11 @@
 services:
+  websocket-server:
+    build: ./rust/websocket-server
+    environment:
+      - RUST_LOG=info
+      - HYPERSTACK_API_KEY=${HYPERSTACK_API_KEY}
+    ports:
+      - "9053:7845"
   ml-service:
     build: ./ml-service # Using same Dockerfile for dev and prod
     environment:
@@ -6,6 +13,8 @@ services:
       - MAX_SPINNED_UP=${MAX_SPINNED_UP}
       - HYPERSTACK_ADMIN_TOKEN=${HYPERSTACK_ADMIN_TOKEN}
       - HYPERSTACK_SPINUP_PERMISSION_TOKEN=${HYPERSTACK_SPINUP_PERMISSION_TOKEN}
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - CF_ZONE_ID=${CF_ZONE_ID}
     command: uv run uvicorn main:app --host 0.0.0.0 --port 5000 --reload
     ports:
       - "9052:5000"

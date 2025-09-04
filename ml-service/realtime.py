@@ -43,12 +43,12 @@ async def websocket_kyutai_tts(websocket: WebSocket):
 
     # If we get here, the service is ready.
     ip = status_result["ip_address"]
-    logger.info(f"Service is ready at {ip}. Attempting to connect...")
-    
+    ws_endpoint = f"ws://{ip}:8080/api/asr-streaming"
+    logger.info(f"Service is ready at {ip}. Attempting to connect to {ws_endpoint}...")
     try:
         headers = { "kyutai-api-key": "public_token" }
         rust_ws = await websockets.connect(
-                    f"ws://{ip}:8080/api/asr-streaming",
+                    ws_endpoint,
                     additional_headers=headers
                 )
         logger.info(f"Successfully connected to backend Kyutai service at {ip}")

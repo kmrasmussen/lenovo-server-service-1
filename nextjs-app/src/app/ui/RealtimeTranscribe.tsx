@@ -26,6 +26,11 @@ interface WordMessage extends BaseMessage {
   text: string;
 }
 
+interface ActionMessage extends BaseMessage {
+  type: 'Action';
+  content: string;
+}
+
 // EndWord message - marks end of word with timing
 interface EndWordMessage extends BaseMessage {
   type: 'EndWord';
@@ -33,7 +38,7 @@ interface EndWordMessage extends BaseMessage {
 }
 
 // Union type for all possible websocket messages
-export type WebSocketMessage = ReadyMessage | StepMessage | WordMessage | EndWordMessage;
+export type WebSocketMessage = ReadyMessage | StepMessage | WordMessage | EndWordMessage | ActionMessage;
 
 // Type guard functions for runtime type checking
 export const isReadyMessage = (msg: WebSocketMessage): msg is ReadyMessage => {
@@ -50,14 +55,19 @@ export const isWordMessage = (msg: WebSocketMessage): msg is WordMessage => {
 
 export const isEndWordMessage = (msg: WebSocketMessage): msg is EndWordMessage => {
   return msg.type === 'EndWord';
-};
+}
+
+export const isActionMessage = (msg: WebSocketMessage): msg is ActionMessage => {
+  return msg.type === 'Action';
+};;
 
 type RealtimeTranscribeProps = {
   onMessage: (message: WebSocketMessage) => void;
   onStart: () => void;
   onEnd: () => void;
+  wsEndpoint: string;
 }
-const RealtimeTranscribe = ({ onMessage, onStart, onEnd }: RealtimeTranscribeProps) => {
+const RealtimeTranscribe = ({ onMessage, onStart, onEnd, wsEndpoint }: RealtimeTranscribeProps) => {
   const [isHeld, setIsHeld] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -67,7 +77,8 @@ const RealtimeTranscribe = ({ onMessage, onStart, onEnd }: RealtimeTranscribePro
   const streamRef = useRef<MediaStream | null>(null); 
 
   const connectWebSocket = useCallback(() => {
-    const wsUrl = 'wss://thinkpad-9052.intercebd.com/realtime/ws-kyutai-tts';
+    const wsUrl = wsEndpoint; //'wss://thinkpad-9052.intercebd.com/realtime/ws-kyutai-tts';
+    console.log('will try to connect to', wsUrl);
     const ws = new WebSocket(wsUrl);
     console.log('making ws', wsUrl);
     ws.onopen = () => {
@@ -78,11 +89,14 @@ const RealtimeTranscribe = ({ onMessage, onStart, onEnd }: RealtimeTranscribePro
     ws.onmessage = (event: MessageEvent) => {
       const data = JSON.parse(event.data);
       console.log('got message', data);
-      if (data.type === 'Word') {
+      if (isWordMessage(data)) {
         console.log('got words', data.text); 
-      } else if (data.type === 'Step') {
+      } else if (isStepMessage(data)) {
         console.log('got space');
-      } else {
+      } else if (isActionMessage(data)) {
+        console.log('got action');
+      } 
+      else {
         console.log('got unknown ws msg type');
       }
       onMessage(data);
@@ -99,7 +113,7 @@ const RealtimeTranscribe = ({ onMessage, onStart, onEnd }: RealtimeTranscribePro
     }
 
     return ws;
-  }, [onMessage]);
+  }, [onMessage, wsEndpoint]);
 
   const startRecording = useCallback(async () => {
     try {
