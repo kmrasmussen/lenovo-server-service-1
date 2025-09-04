@@ -91,7 +91,16 @@ const Camera = () => {
     <Button onClick={takePicture}>Take picture</Button>
     <canvas className='hidden' ref={canvasRef} />
     <div><ul>{
-      similarImages.map((imgUrl, i) => (<li key={i}><Image src={imgUrl} alt="picture you took" unoptimized /></li>))
+      similarImages.map((imgUrl, i) => (<li key={i}>
+      <Image 
+        src={imgUrl}
+        alt="picture you took"
+        unoptimized
+        width={0}
+        height={0}
+        style={{ width: 'auto', height: 'auto' }} 
+      />
+      </li>))
       }</ul></div>
   </div>);
 }
