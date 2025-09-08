@@ -3,7 +3,7 @@ import { auth } from '@/auth';
 import OpenAI from 'openai';
 import { neon } from '@neondatabase/serverless';
 import { Message } from '@/app/types/chatCompletions';
-import { MessageRow } from '@/app/types/db';
+import { MessageJoinedToolRequestsRow } from '@/app/types/db';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -65,23 +65,31 @@ const GET = async () => {
     const userId = parseInt(session.user.id);
 
     const result = await sql`
-      SELECT * FROM messages
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-      LIMIT 5
-    ` as MessageRow[];
-    /*
-    const result = await sql`
-      SELECT id, transcript, created_at FROM voice_messages
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-    `;
-    */
+    SELECT
+      messages.*,
+      tool_requests.id as tool_request_id,
+      tool_requests.function_name,
+      tool_requests.function_arguments,
+      tool_requests.tool_call_id FROM messages
+    LEFT JOIN tool_requests ON messages.id = tool_requests.message_id
+    WHERE user_id = ${userId} 
+    ORDER BY created_at DESC
+    LIMIT 5` as MessageJoinedToolRequestsRow[];
     
-    const messages: Message[] = result.map((item: MessageRow) => ({ 
-      role: item.message_role,
-      content: item.text_content 
-    }));
+    const messages: Message[] = result.map((item: MessageJoinedToolRequestsRow) => {
+      const message: Message = {
+        role: item.message_role,
+        content: item.text_content,
+        toolRequests: []
+      }
+      if (item.function_name != null) {
+        message.toolRequests = [{
+            name: item.function_name,
+            args: item.function_arguments
+          }];
+      }
+      return message;
+    });
 
     return NextResponse.json({ success: true, dbResult: result, messages: messages });
   } catch(error) {

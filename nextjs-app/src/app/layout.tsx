@@ -16,8 +16,8 @@ function HttpsRedirect() {
 }
 
 export const metadata: Metadata = {
-  title: "dumper app title",
-  description: "dump your thoughts here",
+  title: "intercebd",
+  description: "ready when you are",
 };
 
 export default function RootLayout({

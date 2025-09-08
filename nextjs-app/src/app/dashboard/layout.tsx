@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { MessageCircle, User, Camera, Images, Radio } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: "dumper app title",
-  description: "dump your thoughts here",
+  title: "intercebd",
+  description: "ready when you are",
 };
 
 export default async function RootLayout({
