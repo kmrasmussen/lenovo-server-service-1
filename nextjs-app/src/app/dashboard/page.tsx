@@ -5,6 +5,7 @@ import DumpList from '@/app/ui/DumpList';
 import CountdownTimer from '@/app/ui/widgets/CountdownTimer';
 import AssistantResponse from '@/app/ui/AssistantResponse';
 import RecordVoiceMessage from '@/app/ui/RecordVoiceMessage';
+import RecordVoiceMessageNonBlocking from '@/app/ui/RecordVoiceMessageNonBlocking';
 import { useState, useEffect, useCallback } from 'react';
 import { ToolRequest } from '@/app/types/chatCompletions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -19,15 +20,23 @@ type Widget = {
   props: Record<string, unknown>;
 }
 
+type TimerState = {
+  timeLeft: number;
+  isRunning: boolean;
+  isFinished: boolean;
+  duration: number;
+}
 
 export default function Otherpage() {
   const [dumpList, setDumpList] = useState([]);
   const [boardWidgets, setBoardWidgets] = useState<Widget[]>([]);
+  const [timerStates, setTimerStates] = useState<Record<number, TimerState>>({});
+  
   const start_timerTool = (args: string) => {
     const args_parsed = JSON.parse(args);
     console.log('hey im the timer i parsed the args', args, args_parsed);
     addWidget('countdown_timer', {
-      duration: args_parsed.duration || 60,
+      duration: args_parsed.minutes * 60 || 60,
       label: args_parsed.label || 'Timer'
     });
   }
@@ -39,6 +48,36 @@ export default function Otherpage() {
       props: props
     };
     setBoardWidgets(prev => [...prev, newWidget]);
+    
+    // Initialize timer state if it's a countdown timer
+    if (widgetType === 'countdown_timer') {
+      const duration = (props as { duration?: number }).duration || 60;
+      setTimerStates(prev => ({
+        ...prev,
+        [newWidget.id]: {
+          timeLeft: duration,
+          isRunning: false,
+          isFinished: false,
+          duration: duration
+        }
+      }));
+    }
+  };
+
+  const updateTimerState = (id: number, updates: Partial<TimerState>) => {
+    setTimerStates(prev => ({
+      ...prev,
+      [id]: { ...prev[id], ...updates }
+    }));
+  };
+
+  const removeWidget = (id: number) => {
+    setBoardWidgets(prev => prev.filter(w => w.id !== id));
+    setTimerStates(prev => {
+      const newStates = { ...prev };
+      delete newStates[id];
+      return newStates;
+    });
   };
 
   const tools = {
@@ -53,6 +92,19 @@ export default function Otherpage() {
       console.log('Tool not found:', toolRequest.name);
     }
   }
+
+  const awaitingTranscript = useCallback((uuid: string) => {
+    console.log('awaiting transcript', uuid);
+  }, []);
+
+  const startRecordingCallback = useCallback((uuid: string) => {
+    console.log('recording started', uuid);
+  }, []);
+
+  const receivedTranscriptCallback = useCallback((result: unknown, uuid: string) => {
+    console.log('received transcript callback', uuid, result);
+  }, [])
+
   const fetchDumpList = useCallback(() => {
     fetch('api/transcribe', {
       method: 'GET',
@@ -61,7 +113,7 @@ export default function Otherpage() {
     .then((result) => result.json())
     .then((data) => {
       console.log('dump list fetch data', data);
-      setDumpList(data.messages) //data.dbResult.map((item: any) => item.transcript))
+      setDumpList(data.messages)
     })
     .catch((error) => console.log('error fetching dump list', error));
   }, []);
@@ -69,7 +121,6 @@ export default function Otherpage() {
   useEffect(() => {
     fetchDumpList();
   }, [fetchDumpList]);
-
 
   return (<div>
 <Tabs defaultValue="chat">
@@ -83,7 +134,14 @@ export default function Otherpage() {
       <DumperBox
         fetchDumpList={fetchDumpList}
       />
-      <span className="ml-2"><RecordVoiceMessage fetchDumpList={fetchDumpList} /></span>
+      <span className="ml-2">
+        <RecordVoiceMessageNonBlocking
+          awaitingTranscript={awaitingTranscript}
+          fetchDumpList={fetchDumpList}
+          startRecordingCallback={startRecordingCallback}
+          receivedTranscriptCallback={receivedTranscriptCallback}
+        />
+      </span>
       <span className="ml-2"><AssistantResponse fetchDumpList={fetchDumpList} /></span>
     </div>
     <div className="p-6">
@@ -109,9 +167,10 @@ export default function Otherpage() {
       <WidgetComponent
         key={widget.id}
         {...widget.props}
-        onRemove={() => setBoardWidgets(prev => 
-          prev.filter(w => w.id !== widget.id)
-        )}
+        widgetId={widget.id}
+        timerState={timerStates[widget.id]}
+        updateTimerState={updateTimerState}
+        onRemove={() => removeWidget(widget.id)}
       />
     ) : null;
   })}

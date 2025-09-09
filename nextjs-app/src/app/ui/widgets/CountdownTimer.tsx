@@ -1,14 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Play, Pause, Square, X, Timer } from 'lucide-react';
+
+type TimerState = {
+  timeLeft: number;
+  isRunning: boolean;
+  isFinished: boolean;
+  duration: number;
+}
 
 type CountdownTimerProps = {
   duration?: number;
   label?: string;
   onRemove?: () => void;
   widgetId?: number;
+  timerState?: TimerState;
+  updateTimerState?: (id: number, updates: Partial<TimerState>) => void;
   registerWidget?: (id: number, commands: Record<string, () => void>) => void;
   unregisterWidget?: (id: number) => void;
 };
@@ -18,13 +27,33 @@ const CountdownTimer = ({
   label = 'Timer',
   onRemove,
   widgetId,
+  timerState,
+  updateTimerState,
   registerWidget,
   unregisterWidget
 }: CountdownTimerProps) => {
-  const [timeLeft, setTimeLeft] = useState(duration);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isFinished, setIsFinished] = useState(false);
+  // Use external state if provided, otherwise fall back to internal state
+  const [internalTimeLeft, setInternalTimeLeft] = useState(duration);
+  const [internalIsRunning, setInternalIsRunning] = useState(false);
+  const [internalIsFinished, setInternalIsFinished] = useState(false);
+  
+  const timeLeft = timerState?.timeLeft ?? internalTimeLeft;
+  const isRunning = timerState?.isRunning ?? internalIsRunning;
+  const isFinished = timerState?.isFinished ?? internalIsFinished;
+  const timerDuration = timerState?.duration ?? duration;
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Update state function that works with both internal and external state
+  const updateState = useCallback((updates: Partial<TimerState>) => {
+    if (widgetId && updateTimerState && timerState) {
+      updateTimerState(widgetId, updates);
+    } else {
+      if (updates.timeLeft !== undefined) setInternalTimeLeft(updates.timeLeft);
+      if (updates.isRunning !== undefined) setInternalIsRunning(updates.isRunning);
+      if (updates.isFinished !== undefined) setInternalIsFinished(updates.isFinished);
+    }
+  }, [timerState, updateTimerState, widgetId]);
 
   // Format time as MM:SS
   const formatTime = (seconds: number) => {
@@ -38,14 +67,14 @@ const CountdownTimer = ({
     if (widgetId && registerWidget) {
       const commands = {
         stop: () => {
-          setIsRunning(false);
+          updateState({ isRunning: false, timeLeft: timerDuration, isFinished: false });
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
           }
         },
         pause: () => {
-          setIsRunning(false);
+          updateState({ isRunning: false });
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
@@ -53,13 +82,15 @@ const CountdownTimer = ({
         },
         start: () => {
           if (timeLeft > 0 && !isFinished) {
-            setIsRunning(true);
+            updateState({ isRunning: true });
           }
         },
         reset: () => {
-          setIsRunning(false);
-          setTimeLeft(duration);
-          setIsFinished(false);
+          updateState({ 
+            isRunning: false, 
+            timeLeft: timerDuration, 
+            isFinished: false 
+          });
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
@@ -75,20 +106,22 @@ const CountdownTimer = ({
         unregisterWidget(widgetId);
       }
     };
-  }, [widgetId, registerWidget, unregisterWidget, timeLeft, isFinished, duration]);
+  }, [widgetId, updateState, registerWidget, unregisterWidget, timeLeft, isFinished, timerDuration]);
 
   // Timer logic
   useEffect(() => {
     if (isRunning && timeLeft > 0) {
       intervalRef.current = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            setIsRunning(false);
-            setIsFinished(true);
-            return 0;
-          }
-          return prev - 1;
-        });
+        const newTimeLeft = timeLeft - 1;
+        if (newTimeLeft <= 0) {
+          updateState({
+            timeLeft: 0,
+            isRunning: false,
+            isFinished: true
+          });
+        } else {
+          updateState({ timeLeft: newTimeLeft });
+        }
       }, 1000);
     } else {
       if (intervalRef.current) {
@@ -102,22 +135,24 @@ const CountdownTimer = ({
         clearInterval(intervalRef.current);
       }
     };
-  }, [isRunning, timeLeft]);
+  }, [isRunning, timeLeft, updateState]);
 
   const handleStart = () => {
     if (timeLeft > 0 && !isFinished) {
-      setIsRunning(true);
+      updateState({ isRunning: true });
     }
   };
 
   const handlePause = () => {
-    setIsRunning(false);
+    updateState({ isRunning: false });
   };
 
   const handleStop = () => {
-    setIsRunning(false);
-    setTimeLeft(duration);
-    setIsFinished(false);
+    updateState({
+      isRunning: false,
+      timeLeft: timerDuration,
+      isFinished: false
+    });
   };
 
   const getCardClassName = () => {

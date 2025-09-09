@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { neon } from '@neondatabase/serverless';
 import { Message } from '@/app/types/chatCompletions';
 import { MessageJoinedToolRequestsRow } from '@/app/types/db';
+import { TranscribePostDto } from '@/app/types/routeDtos';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -32,23 +33,29 @@ const POST = async (req: NextRequest) => {
       model: "whisper-1",
     });
 
-    console.log('got transcription', transcription);
+    const transcriptText = transcription.text;
+
+    console.log('got transcription', transcriptText);
 
     const userId = parseInt(session.user.id);
 
-    const insertionResult = await sql`
+    await sql`
      INSERT INTO messages (user_id, message_role, text_content)
      VALUES (${userId}, 'user', ${transcription.text})
      RETURNING id, message_role, text_content, created_at 
     `;
 
-    const result = await sql`
+    await sql`
      INSERT INTO voice_messages (user_id, transcript)
      VALUES (${userId}, ${transcription.text})
      RETURNING id, transcript, created_at
     `;
-
-    return NextResponse.json({ success: true, insertionResult: insertionResult, transcription: transcription, dbResult: result });
+    
+    const endpointResponse: TranscribePostDto = {
+      success: true,
+      transcriptText: transcriptText
+    }
+    return NextResponse.json(endpointResponse);
   } catch(error) {
       return NextResponse.json({ success: false, message: error }, { status: 400 });
   }
