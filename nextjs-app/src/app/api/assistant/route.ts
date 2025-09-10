@@ -89,7 +89,7 @@ LIMIT 10` as MessageJoinedToolRequestsRow[];
         tools: any;
         messages: Message[];
       } = {
-        model: "openai/gpt-4.1-nano",
+        model: "deepseek/deepseek-chat-v3.1", // "openai/gpt-4o-mini",
         tools: tools, 
         messages: messages,
       }   

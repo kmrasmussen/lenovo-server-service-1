@@ -5,32 +5,26 @@ import { neon } from '@neondatabase/serverless';
 import { Message, NormalMessage, ToolResponseMessage } from '@/app/types/chatCompletions';
 import { MessageJoinedToolRequestsAndResponsesRow, ToolResponsesRow } from '@/app/types/db';
 import { TranscribePostDto} from '@/app/types/routeDtos';
+import { filterOrphanedToolCalls } from '@/app/lib/historyUtils';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 const openai = new OpenAI();
 export const getChatHistory = async (sql : any, userId : number) => {
-    const result = await sql`
+ const result = await sql`
    SELECT
-      messages.*,
-      tool_requests.id as tool_request_id,
+      messages.id as message_id,
+      messages.message_role,
+      messages.text_content,
+      messages.created_at,
       tool_requests.function_name,
       tool_requests.function_arguments,
-      tool_requests.tool_call_id,
-      tool_responses.response_text as tool_response_text,
-      tool_responses.id as tool_response_id    
+      tool_requests.tool_call_id
    FROM messages
     LEFT JOIN tool_requests ON messages.id = tool_requests.message_id
-    LEFT JOIN tool_responses ON tool_requests.id = tool_responses.tool_request_id
-      AND tool_responses.created_at = (
-        SELECT MAX(tr2.created_at)
-        FROM tool_responses tr2
-        WHERE tr2.tool_request_id = tool_requests.id
-      )
     WHERE user_id = ${userId}
     ORDER BY created_at DESC
     LIMIT 10;` as MessageJoinedToolRequestsAndResponsesRow[];
-
     // Create normal messages and collect tool_call_ids that are present
     const presentToolCallIds = new Set<string>();
     const normalMessages: NormalMessage[] = result.map((item: MessageJoinedToolRequestsAndResponsesRow) => {
@@ -95,8 +89,12 @@ export const getChatHistory = async (sql : any, userId : number) => {
     const allMessages: Message[] = [...normalMessages, ...toolMessages].sort((a, b) => 
      new Date(a._createdAt).getTime() - new Date(b._createdAt).getTime()
     );
+
+    const finalMessages = allMessages; //filterOrphanedToolCalls(allMessages);
+   
+    console.log('final messages', JSON.stringify(finalMessages, null, 2));
     
-    return allMessages;
+    return finalMessages;
 }
 
 const POST = async (req: NextRequest) => {
