@@ -7,8 +7,8 @@ import AssistantResponse from '@/app/ui/AssistantResponse';
 import RecordVoiceMessageNonBlocking from '@/app/ui/RecordVoiceMessageNonBlocking';
 import { useState, useEffect, useCallback } from 'react';
 import { ToolCall, Message, ToolResponseMessage } from '@/app/types/chatCompletions';
-import { DisplayMessage } from '@/app/types/frontendTypes';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { calculateMessagesHash } from '@/app/lib/messageHash';
 
 // =================================================================
 // TYPE DEFINITIONS
@@ -157,7 +157,7 @@ export default function Otherpage() {
               startTime: new Date(toolResponse._createdAt),
             });
           } catch (e) {
-            console.error("Failed to parse timer arguments:", toolCall.function.arguments);
+            console.error("Failed to parse timer arguments:", toolCall.function.arguments, e);
           }
         }
       });
@@ -171,16 +171,27 @@ export default function Otherpage() {
   // =================================================================
   // DATA FETCHING AND EFFECTS
   // =================================================================
-  const fetchDumpList = useCallback(() => {
-    fetch('api/transcribe', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    })
-    .then(result => result.json())
-    .then(data => {
-      setDumpList(data.messages || []);
-    })
-    .catch(error => console.error('Error fetching dump list:', error));
+ const fetchDumpList = useCallback(async () => {
+    try {
+      const response = await fetch('api/transcribe', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+      
+      // Verify hash
+      const computedHash = await calculateMessagesHash(data.messages || []);
+      
+      if (computedHash !== data.messagesHash) {
+        console.error('Hash mismatch!', { server: data.messagesHash, client: computedHash });
+        return;
+      } else {
+        console.log('frontend verified state hash agreement', computedHash);
+        setDumpList(data.messages);
+      }
+    } catch (error) {
+      console.error('Error fetching dump list:', error);
+    }
   }, []);
 
   useEffect(() => {

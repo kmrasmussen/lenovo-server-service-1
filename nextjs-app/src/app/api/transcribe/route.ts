@@ -5,7 +5,7 @@ import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import { Message, NormalMessage, ToolResponseMessage } from '@/app/types/chatCompletions';
 import { MessageJoinedToolRequestsAndResponsesRow, ToolResponsesRow } from '@/app/types/db';
 import { TranscribePostDto} from '@/app/types/routeDtos';
-
+import { calculateMessagesHash } from '@/app/lib/messageHash';
 const sql = neon(process.env.DATABASE_URL!);
 
 const openai = new OpenAI();
@@ -158,8 +158,9 @@ const GET = async () => {
     const userId = parseInt(session.user.id);
 
     const allMessages = await getChatHistory(sql, userId);
+    const messagesHash = await calculateMessagesHash(allMessages);
 
-    return NextResponse.json({ success: true, messages: allMessages });
+    return NextResponse.json({ success: true, messages: allMessages, messagesHash: messagesHash });
   } catch(error) {
     return NextResponse.json({ success: false, message: error }, { status: 400 });
   }
