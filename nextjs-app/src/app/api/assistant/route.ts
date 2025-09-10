@@ -1,18 +1,11 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import OpenAI from 'openai';
 import { neon } from '@neondatabase/serverless';
-import { MessageJoinedToolRequestsRow } from '@/app/types/db';
-import { Message, ChatCompletion, ToolCall } from '@/app/types/chatCompletions';
+import { ChatCompletion, ToolCall, ChatCompletionTool, ChatCompletionRequestBody } from '@/app/types/chatCompletions';
 import { getChatHistory } from '@/app/api/transcribe/route';
 const sql = neon(process.env.DATABASE_URL!);
 
-const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
-
-const getOpenRouterCompletion = async (body: any) => {
+const getOpenRouterCompletion = async (body: ChatCompletionRequestBody) => {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -48,7 +41,7 @@ WHERE messages.user_id = ${userId}
 ORDER BY messages.created_at DESC
 LIMIT 10` as MessageJoinedToolRequestsRow[];
 */
- const tools = [
+ const tools: ChatCompletionTool[] = [
   {
     type: "function",
     function: {
@@ -84,11 +77,7 @@ LIMIT 10` as MessageJoinedToolRequestsRow[];
     
     let completion;
     try {
-     const completionsRequest: {
-        model: string;
-        tools: any;
-        messages: Message[];
-      } = {
+     const completionsRequest: ChatCompletionRequestBody = {
         model: "deepseek/deepseek-chat-v3.1", // "openai/gpt-4o-mini",
         tools: tools, 
         messages: messages,

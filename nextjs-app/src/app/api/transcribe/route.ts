@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import OpenAI from 'openai';
-import { neon } from '@neondatabase/serverless';
+import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import { Message, NormalMessage, ToolResponseMessage } from '@/app/types/chatCompletions';
 import { MessageJoinedToolRequestsAndResponsesRow, ToolResponsesRow } from '@/app/types/db';
 import { TranscribePostDto} from '@/app/types/routeDtos';
-import { filterOrphanedToolCalls } from '@/app/lib/historyUtils';
 
 const sql = neon(process.env.DATABASE_URL!);
 
 const openai = new OpenAI();
-export const getChatHistory = async (sql : any, userId : number) => {
+export const getChatHistory = async (sql : NeonQueryFunction<false, false>, userId : number) => {
  const result = await sql`
    SELECT
       messages.id as message_id,

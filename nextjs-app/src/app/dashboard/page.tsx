@@ -129,7 +129,7 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
                         startTime: new Date(toolResponse._createdAt),
                     });
                 } catch (e) {
-                    console.error("Failed to parse timer arguments:", toolCall.function.arguments);
+                    console.error("Failed to parse timer arguments:", toolCall.function.arguments, e);
                 }
             }
         });
@@ -189,6 +189,25 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
   // =================================================================
   return (
     <div>
+      {/* 
+        This invisible container ensures the CountdownTimer components are always mounted.
+        Because they are mounted, their internal useEffect hooks for ticking and playing
+        the completion sound will run, even when the user is on the "chat" tab.
+        The `display: 'none'` style prevents this block from affecting the page layout.
+      */}
+      <div style={{ display: 'none' }}>
+        {derivedState.activeTimers.map(timer => (
+          <CountdownTimer
+            key={timer.id}
+            id={timer.id}
+            label={timer.label}
+            startTime={timer.startTime}
+            durationSeconds={timer.durationSeconds}
+          />
+        ))}
+      </div>
+
+      {/* The visible UI for the tabs remains below */}
       <Tabs defaultValue="chat">
         <TabsList>
           <TabsTrigger value="chat">Chat</TabsTrigger>
@@ -239,6 +258,7 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
               </span>
             </div>
             <div className="p-6 flex flex-wrap gap-4">
+              {/* This section renders the VISIBLE timers on the board */}
               {derivedState.activeTimers.map(timer => (
                 <CountdownTimer
                   key={timer.id}
@@ -256,5 +276,4 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
+  );}

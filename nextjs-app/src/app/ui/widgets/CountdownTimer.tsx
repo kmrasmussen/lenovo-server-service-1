@@ -1,7 +1,7 @@
 // app/ui/widgets/CountdownTimer.tsx
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Timer } from 'lucide-react';
@@ -24,11 +24,11 @@ const CountdownTimer = ({
   // We use a lazy initializer function for useState. This function runs only ONCE
   // on the initial render to calculate the CORRECT starting value for timeLeft,
   // preventing the buggy initial state of (duration -> 0).
-  const getInitialTimeLeft = () => {
+  const getInitialTimeLeft = useCallback(() => {
     const elapsedMs = Date.now() - startTime.getTime();
     const elapsedSeconds = Math.floor(elapsedMs / 1000);
     return Math.max(0, durationSeconds - elapsedSeconds);
-  };
+  }, [durationSeconds, startTime]);
 
   const [timeLeft, setTimeLeft] = useState(getInitialTimeLeft);
   const prevTimeLeft = useRef(timeLeft); // Initialize ref with the correct starting time
@@ -50,7 +50,7 @@ const CountdownTimer = ({
         clearInterval(intervalRef.current);
       }
     };
-  }, [id, startTime, durationSeconds, timeLeft]); // timeLeft is added to dependency array
+  }, [id, startTime, durationSeconds, timeLeft, getInitialTimeLeft]); // timeLeft is added to dependency array
 
   // This effect now correctly detects the transition from running to finished.
   useEffect(() => {

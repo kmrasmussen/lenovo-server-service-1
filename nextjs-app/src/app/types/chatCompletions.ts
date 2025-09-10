@@ -29,3 +29,28 @@ export type ChatCompletion = {
   id: string | null,
   choices: ChatCompletionChoice[] | null
 }
+
+export type ChatCompletionTool = {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: {
+        [key: string]: {
+          type: string;
+          description: string;
+        };
+      };
+      required: string[];
+    };
+  };
+};
+
+// Defines the overall structure of the request body sent to the AI service
+export type ChatCompletionRequestBody = {
+  model: string;
+  tools: ChatCompletionTool[];
+  messages: Message[];
+};
