@@ -2,14 +2,28 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import OpenAI from 'openai';
 import { neon } from '@neondatabase/serverless';
-import { MessageRow } from '@/app/types/db';
-import type { ChatCompletionTool, ChatCompletionMessageToolCall, ChatCompletionMessageFunctionToolCall, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { MessageJoinedToolRequestsRow } from '@/app/types/db';
+import { Message, ChatCompletion, ToolCall } from '@/app/types/chatCompletions';
+import { getChatHistory } from '@/app/api/transcribe/route';
 const sql = neon(process.env.DATABASE_URL!);
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
   apiKey: process.env.OPENROUTER_API_KEY,
 });
+
+const getOpenRouterCompletion = async (body: any) => {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  return data as ChatCompletion;
+}
 
 const GET = async () => {
   const session = await auth();
@@ -20,14 +34,20 @@ const GET = async () => {
 
   try {
     const userId = parseInt(session.user.id);
-
+    /*
     const result = await sql`
-      SELECT * FROM messages
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC  
-      LIMIT 5
-    ` as MessageRow[];
-
+ SELECT
+    messages.*,
+    tool_requests.id as tool_request_id,
+    tool_requests.function_name,
+    tool_requests.function_arguments,
+    tool_requests.tool_call_id
+FROM messages
+LEFT JOIN tool_requests ON messages.id = tool_requests.message_id
+WHERE messages.user_id = ${userId} 
+ORDER BY messages.created_at DESC
+LIMIT 10` as MessageJoinedToolRequestsRow[];
+*/
  const tools = [
   {
     type: "function",
@@ -47,31 +67,34 @@ const GET = async () => {
     },
   },
 ];
+/*
     let messages = result.map((row) => {
-      const role = row.message_role as "user" | "assistant" | "system";
-      return { role: role, content: row.text_content }
+      const role = row.message_role;
+      return { role: role, content: row.text_content, tool_calls: null }
     });
     messages.push({
       role: "system",
-      content: "You identify as Mr. Banana. End all your endings with, Kind regards, Mr. Banana"
+      content: "You identify as Mr. Banana. End all your endings with, Kind regards, Mr. Banana",
+      tool_calls: null
     })
-    messages = messages.reverse();
-
+    */
+    const messages = await getChatHistory(sql, userId); // messages.reverse();
+    console.log(messages);
     console.log('okay getting response for this convo:', messages);
     
     let completion;
     try {
      const completionsRequest: {
         model: string;
-        tools: ChatCompletionTool[];
-        messages: ChatCompletionMessageParam[];
+        tools: any;
+        messages: Message[];
       } = {
         model: "openai/gpt-4.1-nano",
-        tools: tools as unknown as ChatCompletionTool[],
+        tools: tools, 
         messages: messages,
       }   
       console.log('completionsRequest', completionsRequest);
-      completion = await openai.chat.completions.create(completionsRequest); 
+      completion = await getOpenRouterCompletion(completionsRequest); //await openai.chat.completions.create(completionsRequest); 
       console.log('completion', completion);
     }
     catch(error) {
@@ -80,24 +103,24 @@ const GET = async () => {
       return NextResponse.json({ success: false, message: (error as Error).message, errorNote: 'error getting chatcompletions' }, { status: 400 });
     }
 
-    const responseContent = completion?.choices[0]?.message;
+    const responseContent = completion?.choices?.[0]?.message;
 
     const insertionResult = await sql`
      INSERT INTO messages (user_id, message_role, text_content)
-     VALUES (${userId}, 'assistant', ${responseContent.content})
+     VALUES (${userId}, 'assistant', ${responseContent?.content ?? ''})
      RETURNING id, message_role, text_content, created_at 
     `;
     
     const messageId = insertionResult[0].id;
     let toolCallInsertionResults;
-    if (responseContent.tool_calls) {
+    if (responseContent && 'tool_calls' in responseContent) {
       console.log('some kind of tool calls seem to be present', responseContent.tool_calls);
-      if (responseContent.tool_calls.length > 0) {
+      if (responseContent.tool_calls && responseContent.tool_calls.length > 0) {
         toolCallInsertionResults = await Promise.all(responseContent.tool_calls.map(
-          async (item : ChatCompletionMessageToolCall) => {
-            const functionName = (item as ChatCompletionMessageFunctionToolCall).function.name;
-            const functionArguments = (item as ChatCompletionMessageFunctionToolCall).function.arguments;
-            const toolCallId = (item as ChatCompletionMessageFunctionToolCall).id;
+          async (item : ToolCall) => {
+            const functionName = item.function.name;
+            const functionArguments = item.function.arguments;
+            const toolCallId = item.id;
             const toolCallInsertionResult = await sql`
              INSERT INTO tool_requests (message_id, function_name, function_arguments, tool_call_id)
              VALUES (${messageId}, ${functionName}, ${functionArguments}, ${toolCallId})
@@ -113,7 +136,7 @@ const GET = async () => {
 
     return NextResponse.json({
       success: true,
-      result: result,
+      convoHistory: messages,
       responseContent: responseContent,
       insertionResult: insertionResult,
       toolCallInsertionResults: toolCallInsertionResults,
