@@ -6,11 +6,13 @@ import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Timer } from 'lucide-react';
 
+// THIS IS THE KEY FIX: Add 'onFinish' to the type definition.
 type CountdownTimerProps = {
   id: string;
   label: string;
   startTime: Date;
   durationSeconds: number;
+  onFinish?: () => void; // A timer can optionally have a finish callback
 };
 
 const CountdownTimer = ({
@@ -18,12 +20,9 @@ const CountdownTimer = ({
   label,
   startTime,
   durationSeconds,
+  onFinish, // The function to call when the timer completes
 }: CountdownTimerProps) => {
 
-  // THIS IS THE CORE FIX:
-  // We use a lazy initializer function for useState. This function runs only ONCE
-  // on the initial render to calculate the CORRECT starting value for timeLeft,
-  // preventing the buggy initial state of (duration -> 0).
   const getInitialTimeLeft = useCallback(() => {
     const elapsedMs = Date.now() - startTime.getTime();
     const elapsedSeconds = Math.floor(elapsedMs / 1000);
@@ -31,40 +30,32 @@ const CountdownTimer = ({
   }, [durationSeconds, startTime]);
 
   const [timeLeft, setTimeLeft] = useState(getInitialTimeLeft);
-  const prevTimeLeft = useRef(timeLeft); // Initialize ref with the correct starting time
+  const prevTimeLeft = useRef(timeLeft);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // This effect now correctly handles the interval, starting it only if necessary.
   useEffect(() => {
-    // Only set up an interval if the timer is still running.
     if (timeLeft > 0) {
       intervalRef.current = setInterval(() => {
-        // We can reuse the initializer function to keep the timer synced.
         setTimeLeft(getInitialTimeLeft());
       }, 1000);
     }
-
-    // Cleanup interval on unmount or when props change
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [id, startTime, durationSeconds, timeLeft, getInitialTimeLeft]); // timeLeft is added to dependency array
+  }, [id, startTime, durationSeconds, timeLeft, getInitialTimeLeft]);
 
-  // This effect now correctly detects the transition from running to finished.
+  // This effect now correctly calls the onFinish callback.
   useEffect(() => {
-    // Because the initial state is now correct, this condition will only be true
-    // when the timer ticks from 1 to 0 in real-time.
     if (prevTimeLeft.current > 0 && timeLeft <= 0) {
-      const audio = new Audio('/sounds/bell1.wav');
-      audio.play().catch(error => {
-        console.log("Timer sound playback was prevented by browser policy:", error);
-      });
+      // If the onFinish prop was provided, call it.
+      if (onFinish) {
+        onFinish();
+      }
     }
-    // Update the ref to the current value for the next render cycle.
     prevTimeLeft.current = timeLeft;
-  }, [timeLeft]);
+  }, [timeLeft, onFinish]);
 
   const isFinished = timeLeft <= 0;
 
@@ -94,7 +85,6 @@ const CountdownTimer = ({
           )}
         </div>
       </CardHeader>
-
       <CardContent className="text-center pb-3">
         <div className={`text-5xl font-mono ${isFinished && 'text-green-600'}`}>
           {formatTime(timeLeft)}

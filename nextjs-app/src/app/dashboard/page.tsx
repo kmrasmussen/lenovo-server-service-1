@@ -11,10 +11,10 @@ import { DisplayMessage } from '@/app/types/frontendTypes';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // =================================================================
-// 1. DERIVED STATE AND TIMER TYPES
+// TYPE DEFINITIONS
 // =================================================================
 export type TimerDescriptor = {
-  id: string; // The unique tool_call_id
+  id: string;
   label: string;
   startTime: Date;
   durationSeconds: number;
@@ -22,16 +22,15 @@ export type TimerDescriptor = {
 
 export type StateDerivedProps = {
   activeTimers: TimerDescriptor[];
-  // Future state derived from conversation history can be added here
 };
 
 
 export default function Otherpage() {
   // =================================================================
-  // 2. COMPONENT STATE
+  // STATE & CALLBACKS
   // =================================================================
-  const [dumpList, setDumpList] = useState<DisplayMessage[]>([]);
-   const [derivedState, setDerivedState] = useState<StateDerivedProps>({
+  const [dumpList, setDumpList] = useState<Message[]>([]);
+  const [derivedState, setDerivedState] = useState<StateDerivedProps>({
     activeTimers: [],
   });
   
@@ -45,15 +44,47 @@ export default function Otherpage() {
 
   const receivedTranscriptCallback = useCallback((result: unknown, uuid: string) => {
     console.log('received transcript callback for uuid:', uuid, result);
-  }, [])
+  }, []);
   
   // =================================================================
-  // 3. TOOL DEFINITIONS
+  // AUDIO LOGIC (CENTRALIZED IN THE PARENT)
+  // =================================================================
+  
+  const playBellSound = useCallback(() => {
+    const audioEl = document.getElementById('timer-bell-audio') as HTMLAudioElement;
+    if (audioEl) {
+      audioEl.currentTime = 0;
+      audioEl.play().catch(error => console.log("Error playing bell sound:", error));
+    }
+  }, []);
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      const audioEl = document.getElementById('timer-bell-audio') as HTMLAudioElement;
+      if (audioEl) {
+        audioEl.play().catch(() => {});
+        audioEl.pause();
+        audioEl.currentTime = 0;
+        
+        window.removeEventListener('touchstart', unlockAudio);
+        console.log("Audio context unlocked by user touch for #timer-bell-audio.");
+      }
+    };
+    window.addEventListener('touchstart', unlockAudio);
+    return () => {
+      window.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
+
+  // =================================================================
+  // TOOL DEFINITIONS
   // =================================================================
   const start_timerTool = (args: string): string => {
     try {
       const args_parsed = JSON.parse(args);
-      return `Successfully started ${args_parsed.minutes} minute timer for ${args_parsed.label || 'general purpose'}`;
+      const minutes = args_parsed.minutes || 0;
+      const seconds = args_parsed.seconds || 0;
+      return `Successfully started a ${minutes} minute and ${seconds} second timer for ${args_parsed.label || 'general purpose'}`;
     } catch (e) {
       console.error("Error parsing start_timer arguments:", e);
       return "Error starting timer: invalid arguments.";
@@ -61,7 +92,7 @@ export default function Otherpage() {
   };
 
   const tools = {
-    'start_timer': start_timerTool
+    'start_timer': start_timerTool,
   };
 
   const handleToolRequest = (toolRequest: ToolCall) => {
@@ -86,61 +117,59 @@ export default function Otherpage() {
       .then(result => result.json())
       .then(data => {
         console.log('Result of posting tool response:', data);
-        fetchDumpList(); // Refetch history to get the new tool response message
+        fetchDumpList();
       })
       .catch(error => console.error('Error posting tool response:', error));
   };
 
   // =================================================================
-  // 4. STATE DERIVATION LOGIC
+  // STATE DERIVATION LOGIC
   // =================================================================
- 
-// The function signature now accepts the raw Message[] array
-const state2props = useCallback((eventSequence: Message[]): StateDerivedProps => {
+  const state2props = useCallback((eventSequence: Message[]): StateDerivedProps => {
     const activeTimers: TimerDescriptor[] = [];
-
-    // 1. Create a map of tool_call_id -> ToolResponseMessage for efficient lookup,
-    //    just for the scope of this function.
     const toolResponsesMap = new Map<string, ToolResponseMessage>();
+    
     eventSequence.forEach(message => {
-        if (message.role === 'tool') {
-            const toolMessage = message as ToolResponseMessage;
-            toolResponsesMap.set(toolMessage.tool_call_id, toolMessage);
-        }
+      if (message.role === 'tool') {
+        const toolMessage = message as ToolResponseMessage;
+        toolResponsesMap.set(toolMessage.tool_call_id, toolMessage);
+      }
     });
-
-    // 2. Iterate through messages to find tool *calls*
+    
     eventSequence.forEach(message => {
-        // Ensure the message is a NormalMessage that could contain tool_calls
-        if (message.role !== 'assistant' || !('tool_calls' in message) || !message.tool_calls) {
-            return;
-        }
+      if (message.role !== 'assistant' || !('tool_calls' in message) || !message.tool_calls) {
+        return;
+      }
+      
+      message.tool_calls.forEach(toolCall => {
+        const toolResponse = toolResponsesMap.get(toolCall.id);
+        if (toolCall.function.name === 'start_timer' && toolResponse) {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const minutes = args.minutes || 0;
+            const seconds = args.seconds || 0;
+            const totalDurationSeconds = (minutes * 60) + seconds;
 
-        message.tool_calls.forEach(toolCall => {
-            // 3. Use the local map to check if the call was executed
-            const toolResponse = toolResponsesMap.get(toolCall.id);
-            if (toolCall.function.name === 'start_timer' && toolResponse) {
-                try {
-                    const args = JSON.parse(toolCall.function.arguments);
-                    activeTimers.push({
-                        id: toolCall.id,
-                        label: args.label || 'Timer',
-                        durationSeconds: (args.minutes || 0) * 60,
-                        startTime: new Date(toolResponse._createdAt),
-                    });
-                } catch (e) {
-                    console.error("Failed to parse timer arguments:", toolCall.function.arguments, e);
-                }
-            }
-        });
+            activeTimers.push({
+              id: toolCall.id,
+              label: args.label || 'Timer',
+              durationSeconds: totalDurationSeconds,
+              startTime: new Date(toolResponse._createdAt),
+            });
+          } catch (e) {
+            console.error("Failed to parse timer arguments:", toolCall.function.arguments);
+          }
+        }
+      });
     });
 
     return {
-        activeTimers: activeTimers,
+      activeTimers: activeTimers,
     };
-}, []);
+  }, []);
+
   // =================================================================
-  // 5. DATA FETCHING AND EFFECTS
+  // DATA FETCHING AND EFFECTS
   // =================================================================
   const fetchDumpList = useCallback(() => {
     fetch('api/transcribe', {
@@ -149,52 +178,39 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
     })
     .then(result => result.json())
     .then(data => {
-      console.log('Fetched dump list data:', data);
-      // NOTE: Assumes the API returns data that can be cast to DisplayMessage[]
-      // or that processing to add `associatedToolResponses` happens here.
       setDumpList(data.messages || []);
     })
     .catch(error => console.error('Error fetching dump list:', error));
   }, []);
 
-  // Initial fetch on component mount
   useEffect(() => {
     fetchDumpList();
   }, [fetchDumpList]);
 
-  // Re-run the state derivation whenever the conversation history changes
   useEffect(() => {
     if (dumpList.length > 0) {
-      // Call state2props directly with the raw dumpList
       const newDerivedState = state2props(dumpList);
       setDerivedState(newDerivedState);
     }
   }, [dumpList, state2props]);
 
-  // Optional: Periodically re-run derivation to keep timers up-to-date
   useEffect(() => {
     const intervalId = setInterval(() => {
       if (dumpList.length > 0) {
-        // Call state2props directly with the raw dumpList here too
         const newDerivedState = state2props(dumpList);
         setDerivedState(newDerivedState);
       }
     }, 10000);
-
     return () => clearInterval(intervalId);
   }, [dumpList, state2props]);
   
   // =================================================================
-  // 6. RENDER
+  // RENDER
   // =================================================================
   return (
     <div>
-      {/* 
-        This invisible container ensures the CountdownTimer components are always mounted.
-        Because they are mounted, their internal useEffect hooks for ticking and playing
-        the completion sound will run, even when the user is on the "chat" tab.
-        The `display: 'none'` style prevents this block from affecting the page layout.
-      */}
+      <audio id="timer-bell-audio" src="/sounds/bell1.wav" preload="auto" />
+      
       <div style={{ display: 'none' }}>
         {derivedState.activeTimers.map(timer => (
           <CountdownTimer
@@ -203,11 +219,11 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
             label={timer.label}
             startTime={timer.startTime}
             durationSeconds={timer.durationSeconds}
+            onFinish={playBellSound}
           />
         ))}
       </div>
 
-      {/* The visible UI for the tabs remains below */}
       <Tabs defaultValue="chat">
         <TabsList>
           <TabsTrigger value="chat">Chat</TabsTrigger>
@@ -218,14 +234,12 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
             <div className="p-6 w-full flex items-center">
               <DumperBox fetchDumpList={fetchDumpList} />
               <span className="ml-2">
-              <span className="ml-2">
                 <RecordVoiceMessageNonBlocking
                   fetchDumpList={fetchDumpList}
                   awaitingTranscript={awaitingTranscript}
                   startRecordingCallback={startRecordingCallback}
                   receivedTranscriptCallback={receivedTranscriptCallback}
                 />
-              </span>
               </span>
               <span className="ml-2">
                 <AssistantResponse fetchDumpList={fetchDumpList} />
@@ -244,21 +258,18 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
             <div className="p-6 w-full flex items-center">
               <DumperBox fetchDumpList={fetchDumpList} />
               <span className="ml-2">
-                 <span className="ml-2">
                   <RecordVoiceMessageNonBlocking
                     fetchDumpList={fetchDumpList}
                     awaitingTranscript={awaitingTranscript}
                     startRecordingCallback={startRecordingCallback}
                     receivedTranscriptCallback={receivedTranscriptCallback}
                   />
-                </span>
               </span>
               <span className="ml-2">
                 <AssistantResponse fetchDumpList={fetchDumpList} />
               </span>
             </div>
             <div className="p-6 flex flex-wrap gap-4">
-              {/* This section renders the VISIBLE timers on the board */}
               {derivedState.activeTimers.map(timer => (
                 <CountdownTimer
                   key={timer.id}
@@ -276,4 +287,5 @@ const state2props = useCallback((eventSequence: Message[]): StateDerivedProps =>
         </TabsContent>
       </Tabs>
     </div>
-  );}
+  );
+}

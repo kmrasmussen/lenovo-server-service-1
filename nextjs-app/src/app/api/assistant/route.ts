@@ -54,8 +54,16 @@ LIMIT 10` as MessageJoinedToolRequestsRow[];
             type: "number",
             description: "the number of minutes the timer should run",
           },
+          seconds: {
+            type: "number",
+            description: "if the user wants a whole number of minutes set to 0 otherwise if the user wants a timer with more precision, eg two and a half minute, then set to the relevant number of seconds",
+          },
+          label: {
+            type: "string",
+            description: "make a short label based on what the user described, if the user gave no info just write Timer"
+          }
         },
-        required: ["minutes"], // Also fix the typo here
+        required: ["minutes", "seconds", "label"], 
       },
     },
   },
