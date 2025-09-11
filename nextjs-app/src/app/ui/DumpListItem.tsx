@@ -8,12 +8,21 @@ import { ToolCall } from '@/app/types/chatCompletions';
 import { DisplayMessage } from '@/app/types/frontendTypes';
 
 type DumpListItemProps = {
-  item: DisplayMessage,
-  handleToolRequest: (toolRequest: ToolCall) => void,
+  item: DisplayMessage;
+  handleToolRequest: (toolRequest: ToolCall, stateHash: string) => void;
+  currentStateHash: string | null;
 }
 
-const DumpListItem = ({ item, handleToolRequest }: DumpListItemProps) => {
+const DumpListItem = ({ item, handleToolRequest, currentStateHash }: DumpListItemProps) => {
   const isUser = item.role == 'user';
+
+  const handleClickExecute = (toolRequest: ToolCall) => {
+    if (currentStateHash == null)  {
+      console.log('click execute button failed because currentStateHash is null');
+    } else {
+      handleToolRequest(toolRequest, currentStateHash);
+    }
+  }
 
   return (<li>
     <Card>
@@ -60,7 +69,7 @@ const DumpListItem = ({ item, handleToolRequest }: DumpListItemProps) => {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleToolRequest(toolRequest)}
+                        onClick={() => handleClickExecute(toolRequest)}
                         className="mt-2"
                       >
                         <Play className="w-3 h-3 mr-1" />

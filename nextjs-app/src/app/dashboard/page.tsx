@@ -6,9 +6,10 @@ import CountdownTimer from '@/app/ui/widgets/CountdownTimer';
 import AssistantResponse from '@/app/ui/AssistantResponse';
 import RecordVoiceMessageNonBlocking from '@/app/ui/RecordVoiceMessageNonBlocking';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ToolCall, Message, ToolResponseMessage } from '@/app/types/chatCompletions';
+import { ToolCall, Message, RequestAssistantMessageEvent, ToolResponseMessage, EventContainer, UserTextSubmissionEvent } from '@/app/types/chatCompletions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { calculateMessagesHash } from '@/app/lib/messageHash';
+import { Button } from "@/components/ui/button";
+import { calculateMessagesHash, calculateEventHash } from '@/app/lib/messageHash';
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { tools } from '@/app/lib/serverSideTools';
@@ -34,6 +35,7 @@ export default function Otherpage() {
   // STATE & CALLBACKS
   // =================================================================
   const [dumpList, setDumpList] = useState<Message[]>([]);
+  const [eventHeap, setEventHeap] = useState<EventContainer[]>([]);
   const [stateHash, setStateHash] = useState<string | null>(null);
   const [autorespond, setAutorespond] = useState<boolean>(true);
   const [autoexecute, setAutoexecute] = useState<boolean>(true);
@@ -42,6 +44,23 @@ export default function Otherpage() {
     activeTimers: [],
   });
   const [isRetrievingLLMResponse, setIsRetrievingLLMResponse] = useState(false);
+
+  const insertInEventHeap = useCallback((candidateEventContainer: EventContainer) => {
+    setEventHeap(prevHeap => {
+      // check if hash already exists
+      const exists = prevHeap.some(
+        e => e.currentEventHash === candidateEventContainer.currentEventHash
+      );
+      if (exists) {
+        console.log('insertInEventHeap, event already exists');
+        return prevHeap; // do nothing if duplicate
+      } else {
+        console.log('insertInEventHeap, did not exist inserting');
+        return [...prevHeap, candidateEventContainer];
+      }
+    });
+  }, []);
+
 
   const {fetchDumpList, handleToolRequest, retrieveLLMResponse} = useMemo(() => {
     const fetchDumpList = async () => {
@@ -83,7 +102,11 @@ export default function Otherpage() {
       // =================================================================
     }
 
-    const handleToolRequest = (toolRequest: ToolCall) => {
+    const handleToolRequest = (toolRequest: ToolCall, stateHashArg: string) => {
+      if (stateHashArg != stateHash) {
+        console.error(`handleToolRequest called but stateHashARg ${stateHashArg} does not match stateHash ${stateHash}`);
+        return;
+      }
       const tool = tools[toolRequest.function.name as keyof typeof tools];
       if (!tool) {
         console.log('Tool not found:', toolRequest.function.name);
@@ -132,6 +155,78 @@ export default function Otherpage() {
     return {fetchDumpList, handleToolRequest, retrieveLLMResponse}
   }, [stateHash, setIsRetrievingLLMResponse, autoexecute, autorespond, autotoolfollowup]);
 
+  const getEventTop = useCallback((): string | null => {
+    if (eventHeap.length > 0) {
+      return eventHeap[eventHeap.length - 1].currentEventHash; // JavaScript doesn't support negative indexing
+    } else {
+      return null;
+    }
+  }, [eventHeap]); // Don't forget the dependency array
+  const submitText = useCallback(async (text: string) => {
+    console.log('hey requesting LLM response yeah!?', getEventTop());
+      const submissionEvent : UserTextSubmissionEvent = {
+      type: 'UserTextSubmissionEvent',
+      text: text,
+      timestamp: Date.now()
+    }
+    const prevEventHash = getEventTop();
+    const eventContainer : EventContainer = {
+      event: submissionEvent,
+      prevEventHash: prevEventHash,
+      currentEventHash: await calculateEventHash(prevEventHash, submissionEvent) 
+    }
+    console.log('submissionEvent', submissionEvent);
+    console.log('eventContainer', eventContainer);
+    setEventHeap(prev => [...prev, eventContainer]);
+    console.log('ok sending eventContainer to server now', eventContainer);
+    fetch('/api/message/event', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(eventContainer)
+    })
+    .then((result) => result.json())
+    .then((data) => {
+      console.log('result of trying to submit eventContainer', data);
+      if (data.success) {
+        console.log('it was success');
+      }
+    })
+    .catch((error) => console.log('error submitting event container', error));
+
+  }, [eventHeap, getEventTop]);
+
+  const addRequestLLMResponseEvent = useCallback(async () => {
+    console.log('requesting llm content yeah?', getEventTop());
+    const assistantRequestEvent : RequestAssistantMessageEvent = {
+      type: 'RequestAssistantMessageEvent',
+      text: 'ready',
+      timestamp: Date.now()
+    }
+    const prevEventHash = getEventTop();
+    const eventContainer : EventContainer = {
+      event: assistantRequestEvent,
+      prevEventHash: prevEventHash,
+      currentEventHash: await calculateEventHash(prevEventHash, assistantRequestEvent) 
+    }
+    console.log('assistantRequestEvent', assistantRequestEvent);
+    console.log('eventContainer assistantRequest', eventContainer);
+    setEventHeap(prev => [...prev, eventContainer]);
+    console.log('ok sending assistantRequest eventContainer to server now', eventContainer);
+    fetch('/api/message/event', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(eventContainer)
+    })
+    .then((result) => result.json())
+    .then((data) => {
+      console.log('result of trying to submit asistantRequest eventContainer', data);
+      if (data.success) {
+        console.log('it was success submitting assistantRequestEvent');
+      }
+    })
+    .catch((error) => console.log('error submitting event container', error));
+
+  }, [eventHeap, getEventTop]);
   // =================================================================
   // SERVER SIDE EVENTS
   // =================================================================
@@ -147,14 +242,13 @@ const triggerRefresh = useCallback(() => {
 
 const handleSSEMessage = useCallback((event: MessageEvent) => {
   const data = JSON.parse(event.data);
+  console.log('got SSE data', data);
   sseMessagesRef.current = [...sseMessagesRef.current, data];
   console.log('all sseMessages', sseMessagesRef.current);
-  
-  if (data.type === 'new_message') {
-    console.log('New user message:', data.content);
-    triggerRefresh();
-  }
-}, [triggerRefresh]);
+  const sseEventContainer = data as EventContainer
+  console.log('inserting SSE eventcontainer in event heap');
+  insertInEventHeap(sseEventContainer);
+}, [triggerRefresh, eventHeap]);
 
 // Separate useEffect for the refresh logic
 useEffect(() => {
@@ -324,9 +418,10 @@ return (
           <TabsTrigger value="board">Board</TabsTrigger>
         </TabsList>
         <TabsContent value="chat">
+          
           <div className="h-full flex flex-col w-full">
             <div className="p-6 w-full flex items-center">
-              <DumperBox fetchDumpList={fetchDumpList} />
+              <DumperBox submitText={submitText} fetchDumpList={fetchDumpList} />
               <span className="ml-2">
                 <RecordVoiceMessageNonBlocking
                   fetchDumpList={fetchDumpList}
@@ -365,11 +460,23 @@ return (
               <span className="ml-2">
                 <AssistantResponse retrieveLLMResponse={retrieveLLMResponse} currentStateHash={stateHash} isRetrievingLLMResponse={isRetrievingLLMResponse} />
               </span>
+              <span className="ml-2">
+                <Button onClick={addRequestLLMResponseEvent}>more</Button>
+              </span>
             </div>
+            <div>
+  {eventHeap.map((e, idx) => (
+    <div key={idx}>
+      {JSON.stringify(e)}
+    </div>
+  ))}
+</div>
+
             <div className="p-6">
               <DumpList 
                 dumpList={dumpList}
                 handleToolRequest={handleToolRequest}
+                currentStateHash={stateHash}
               />
             </div>
           </div>

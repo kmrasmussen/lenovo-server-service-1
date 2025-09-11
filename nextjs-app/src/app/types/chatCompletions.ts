@@ -12,7 +12,7 @@ export type ToolResponseMessage = {
   content: string,
   name: string, // function name
   tool_call_id: string, // given by OR
-  _createdAt: string
+  _createdAt: string,
 }
 export type NormalMessage = {
   role: string,
@@ -54,3 +54,30 @@ export type ChatCompletionRequestBody = {
   tools: ChatCompletionTool[];
   messages: Message[];
 };
+
+export type UserTextSubmissionEvent = {
+  type: 'UserTextSubmissionEvent';
+  text: string;
+  timestamp: number; 
+}
+export type UserTextSubmissionReceiptEvent = {
+  type: 'UserTextSubmissionReceiptEvent';
+  text: string;
+  timestamp: number; 
+}
+export type RequestAssistantMessageEvent = {
+  type: 'RequestAssistantMessageEvent';
+  text: 'ready',
+  timestamp: number;
+}
+export type AssistantMessageEvent = {
+  type: 'AssistantMessageEvent';
+  message: NormalMessage
+  timestamp: number;
+}
+export type Event = UserTextSubmissionEvent | UserTextSubmissionReceiptEvent | RequestAssistantMessageEvent; 
+export type EventContainer = {
+  event: Event
+  prevEventHash: string | null,
+  currentEventHash: string
+}

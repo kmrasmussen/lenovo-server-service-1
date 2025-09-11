@@ -1,0 +1,163 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useKeyManagement } from './keyManagement';
+
+const CryptoPage: React.FC = () => {
+  const km = useKeyManagement();
+  
+  const [documentToSign, setDocumentToSign] = useState('Hello, World!');
+  const [signature, setSignature] = useState('');
+  const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
+  const [publicKeyString, setPublicKeyString] = useState('');
+  const [externalPublicKey, setExternalPublicKey] = useState('');
+
+  const handleSign = async () => {
+    try {
+      const sig = await km.sign(documentToSign);
+      setSignature(sig);
+      setVerificationResult(null);
+    } catch (error) {
+              width: '100%', 
+              height: '100px', 
+              marginTop: '10px', 
+              fontFamily: 'monospace' 
+            }}
+          />
+        )}
+      </div>
+
+      <div>
+        <h3>Key Management</h3>
+        <button onClick={handleRegenerateKeys} style={{ marginRight: '10px' }}>
+          Regenerate Keys
+        </button>
+        <button onClick={handleDeleteKeys} style={{ color: 'red' }}>
+          Delete Keys
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default CryptoPage;
+      console.error('Signing failed:', error);
+    }
+  };
+
+  const handleVerify = async () => {
+    try {
+      const externalKey = externalPublicKey.trim() || undefined;
+      const result = await km.verify(documentToSign, signature, externalKey);
+      setVerificationResult(result);
+    } catch (error) {
+      setVerificationResult(false);
+    }
+  };
+
+  const handleExportPublicKey = async () => {
+    try {
+      const publicKey = await km.getPublicKey();
+      setPublicKeyString(publicKey);
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  };
+
+  const handleDeleteKeys = () => {
+    km.deleteKeys();
+    setSignature('');
+    setVerificationResult(null);
+    setPublicKeyString('');
+  };
+
+  const handleRegenerateKeys = async () => {
+    try {
+      await km.regenerateKeys();
+      setSignature('');
+      setVerificationResult(null);
+      setPublicKeyString('');
+    } catch (error) {
+      console.error('Regeneration failed:', error);
+    }
+  };
+
+  if (km.isLoading) {
+    return <div>Loading crypto keys...</div>;
+  }
+
+  return (
+    <div style={{ padding: '20px', maxWidth: '800px' }}>
+      <h2>Cryptographic Signing Demo</h2>
+      
+      {km.error && (
+        <div style={{ 
+          backgroundColor: '#ffebee', 
+          color: '#c62828', 
+          padding: '10px', 
+          borderRadius: '4px',
+          marginBottom: '20px'
+        }}>
+          Error: {km.error}
+          <button onClick={km.clearError} style={{ marginLeft: '10px' }}>
+            Clear
+          </button>
+        </div>
+      )}
+      
+      <div style={{ marginBottom: '20px' }}>
+        <p>Key Pair Status: {km.hasKeys ? '✅ Loaded' : '❌ Not Available'}</p>
+      </div>
+
+      <div style={{ marginBottom: '20px' }}>
+        <h3>Document to Sign/Verify</h3>
+        <textarea
+          value={documentToSign}
+          onChange={(e) => setDocumentToSign(e.target.value)}
+          style={{ width: '100%', height: '80px', marginBottom: '10px' }}
+        />
+        <button onClick={handleSign} disabled={!km.hasKeys}>
+          Sign Document
+        </button>
+      </div>
+
+      {signature && (
+        <div style={{ marginBottom: '20px' }}>
+          <h3>Signature</h3>
+          <textarea
+            value={signature}
+            readOnly
+            style={{ width: '100%', height: '100px', fontFamily: 'monospace' }}
+          />
+        </div>
+      )}
+
+      <div style={{ marginBottom: '20px' }}>
+        <h3>Verify Signature</h3>
+        <input
+          type="text"
+          placeholder="External public key (optional)"
+          value={externalPublicKey}
+          onChange={(e) => setExternalPublicKey(e.target.value)}
+          style={{ width: '100%', marginBottom: '10px' }}
+        />
+        <button onClick={handleVerify} disabled={!signature}>
+          Verify Signature
+        </button>
+        {verificationResult !== null && (
+          <p style={{ color: verificationResult ? 'green' : 'red' }}>
+            Verification: {verificationResult ? '✅ Valid' : '❌ Invalid'}
+          </p>
+        )}
+      </div>
+
+      <div style={{ marginBottom: '20px' }}>
+        <h3>Public Key Export</h3>
+        <button onClick={handleExportPublicKey} disabled={!km.hasKeys}>
+          Export Public Key
+        </button>
+        {publicKeyString && (
+          <textarea
+            value={publicKeyString}
+            readOnly
+            style={{ 
