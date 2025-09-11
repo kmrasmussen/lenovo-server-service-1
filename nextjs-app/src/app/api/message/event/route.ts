@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { neon } from '@neondatabase/serverless';
 import { redis } from '@/app/lib/redis';
-import { EventContainer, UserTextSubmissionReceiptEvent, UserTextSubmissionEvent, Message } from '@/app/types/chatCompletions';
+import { EventContainer, UserTextSubmissionReceiptEvent, AssistantMessageGenerationStartedEvent, UserTextSubmissionEvent, Message } from '@/app/types/chatCompletions';
 import { calculateEventHash } from '@/app/lib/messageHash'
 import { getCompletion } from '@/app/lib/completions';
 const sql = neon(process.env.DATABASE_URL!);
@@ -61,6 +61,13 @@ const getEventChain = async (startingHash: string, userId: number): Promise<Even
   return rows.map(row => row.raw_event_container_json as EventContainer);
 };
 
+const sendEventContainerToClient = (userId: number, eventContainer: EventContainer) => {
+  redis.publish(`user:${userId}:events`, JSON.stringify(eventContainer)).catch(error => {
+    console.error('Redis publish failed:', error);
+    // Don't throw - just log the error
+  });
+}
+
 const POST = async (req: NextRequest) => {
   const session = await auth();
   
@@ -106,6 +113,17 @@ const POST = async (req: NextRequest) => {
       const insertedHash = insertionResult.current_event_hash;
       const eventChain = await getEventChain(insertionResult.current_event_hash, userId);
       const messages = eventContainerChainToChatMessages(eventChain); 
+      const generationStartedEvent : AssistantMessageGenerationStartedEvent = {
+        type: 'AssistantMessageGenerationStartedEvent',
+        text: 'generating',
+        timestamp: Date.now(),
+      }
+      const generationStartedEventContainer : EventContainer = {
+        event: generationStartedEvent,
+        prevEventHash: insertionResult.current_event_hash,
+        currentEventHash: await calculateEventHash(insertionResult.current_event_hash, generationStartedEvent)
+      }
+      sendEventContainerToClient(userId, generationStartedEventContainer);
       const completion = await getCompletion(messages); 
       return NextResponse.json({ success: true, message: 'got an eventchain', completion: completion, messages: messages, eventChain: eventChain, insertionResult: insertionResult }, { status: 200 });
     }

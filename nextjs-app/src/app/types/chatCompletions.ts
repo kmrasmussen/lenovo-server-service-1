@@ -70,12 +70,17 @@ export type RequestAssistantMessageEvent = {
   text: 'ready',
   timestamp: number;
 }
+export type AssistantMessageGenerationStartedEvent = {
+  type: 'AssistantMessageGenerationStartedEvent';
+  text: 'generating',
+  timestamp: number;
+}
 export type AssistantMessageEvent = {
   type: 'AssistantMessageEvent';
   message: NormalMessage
   timestamp: number;
 }
-export type Event = UserTextSubmissionEvent | UserTextSubmissionReceiptEvent | RequestAssistantMessageEvent; 
+export type Event = AssistantMessageGenerationStartedEvent | UserTextSubmissionEvent | UserTextSubmissionReceiptEvent | RequestAssistantMessageEvent; 
 export type EventContainer = {
   event: Event
   prevEventHash: string | null,
