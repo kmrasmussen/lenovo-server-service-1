@@ -77,10 +77,10 @@ export type AssistantMessageGenerationStartedEvent = {
 }
 export type AssistantMessageEvent = {
   type: 'AssistantMessageEvent';
-  message: NormalMessage
+  completion: ChatCompletion
   timestamp: number;
 }
-export type Event = AssistantMessageGenerationStartedEvent | UserTextSubmissionEvent | UserTextSubmissionReceiptEvent | RequestAssistantMessageEvent; 
+export type Event = AssistantMessageEvent | AssistantMessageGenerationStartedEvent | UserTextSubmissionEvent | UserTextSubmissionReceiptEvent | RequestAssistantMessageEvent; 
 export type EventContainer = {
   event: Event
   prevEventHash: string | null,

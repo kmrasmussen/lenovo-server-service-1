@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { neon } from '@neondatabase/serverless';
 import { redis } from '@/app/lib/redis';
-import { EventContainer, UserTextSubmissionReceiptEvent, AssistantMessageGenerationStartedEvent, UserTextSubmissionEvent, Message } from '@/app/types/chatCompletions';
+import { AssistantMessageEvent, EventContainer, UserTextSubmissionReceiptEvent, AssistantMessageGenerationStartedEvent, UserTextSubmissionEvent, Message } from '@/app/types/chatCompletions';
 import { calculateEventHash } from '@/app/lib/messageHash'
 import { getCompletion } from '@/app/lib/completions';
 const sql = neon(process.env.DATABASE_URL!);
@@ -125,6 +125,17 @@ const POST = async (req: NextRequest) => {
       }
       sendEventContainerToClient(userId, generationStartedEventContainer);
       const completion = await getCompletion(messages); 
+      const assistantMessageEvent : AssistantMessageEvent = {
+        type: 'AssistantMessageEvent',
+        completion: completion, 
+        timestamp: Date.now(),
+      }
+      const completionEventContainer : EventContainer = {
+        event: assistantMessageEvent,
+        prevEventHash: generationStartedEventContainer.currentEventHash,
+        currentEventHash: await calculateEventHash(generationStartedEventContainer.currentEventHash, assistantMessageEvent)
+      }
+      sendEventContainerToClient(userId, completionEventContainer);
       return NextResponse.json({ success: true, message: 'got an eventchain', completion: completion, messages: messages, eventChain: eventChain, insertionResult: insertionResult }, { status: 200 });
     }
     else {
