@@ -5,10 +5,14 @@ import DumpList from '@/app/ui/DumpList';
 import CountdownTimer from '@/app/ui/widgets/CountdownTimer';
 import AssistantResponse from '@/app/ui/AssistantResponse';
 import RecordVoiceMessageNonBlocking from '@/app/ui/RecordVoiceMessageNonBlocking';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ToolCall, Message, ToolResponseMessage } from '@/app/types/chatCompletions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { calculateMessagesHash } from '@/app/lib/messageHash';
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { tools } from '@/app/lib/serverSideTools';
+import { runtime } from '@/app/lib/runtime';
 
 // =================================================================
 // TYPE DEFINITIONS
@@ -30,10 +34,153 @@ export default function Otherpage() {
   // STATE & CALLBACKS
   // =================================================================
   const [dumpList, setDumpList] = useState<Message[]>([]);
+  const [stateHash, setStateHash] = useState<string | null>(null);
+  const [autorespond, setAutorespond] = useState<boolean>(true);
+  const [autoexecute, setAutoexecute] = useState<boolean>(true);
+  const [autotoolfollowup, setAutotoolfollowup] = useState<boolean>(true);
   const [derivedState, setDerivedState] = useState<StateDerivedProps>({
     activeTimers: [],
   });
+  const [isRetrievingLLMResponse, setIsRetrievingLLMResponse] = useState(false);
+
+  const {fetchDumpList, handleToolRequest, retrieveLLMResponse} = useMemo(() => {
+    const fetchDumpList = async () => {
+      try {
+        const response = await fetch('api/transcribe', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        
+        // Verify hash
+        const computedHash = await calculateMessagesHash(data.messages || []);
+        
+        if (computedHash !== data.messagesHash) {
+          console.error('Hash mismatch!', { server: data.messagesHash, client: computedHash });
+          return;
+        }
+
+        // =================================================================
+        // MODIFIED: Pass retrieved data to the runtime function
+        // It is called before setting state, so `stateHash` is the "previous" hash.
+        // This allows it to compare the old hash with the new `computedHash`.
+        // =================================================================
+        runtime(stateHash, computedHash, data.messages || [], autoexecute, handleToolRequest, autorespond, retrieveLLMResponse, autotoolfollowup);
+
+        // Now, update the component's state
+        console.log('frontend verified state hash agreement', computedHash);
+        setDumpList(data.messages);
+        setStateHash(computedHash);
+
+      } catch (error) {
+        console.error('Error fetching dump list:', error);
+      }
+      // =================================================================
+      // MODIFIED: The dependency array is updated to include state variables
+      // that the function depends on for the runtime logic.
+      // `handleToolRequest` is omitted to prevent a circular dependency warning,
+      // as it depends on `fetchDumpList`.
+      // =================================================================
+    }
+
+    const handleToolRequest = (toolRequest: ToolCall) => {
+      const tool = tools[toolRequest.function.name as keyof typeof tools];
+      if (!tool) {
+        console.log('Tool not found:', toolRequest.function.name);
+        return;
+      }
+      
+      const toolResponse = tool(toolRequest.function.arguments);
+      const payload = {
+        toolCallId: toolRequest.id,
+        toolResponseText: toolResponse,
+        toolFunctionName: toolRequest.function.name
+      };
+
+      fetch('/api/tools/toolResponse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(result => result.json())
+        .then(data => {
+          console.log('Result of posting tool response:', data);
+          fetchDumpList();
+        })
+        .catch(error => console.error('Error posting tool response:', error));
+    };
+
+    const retrieveLLMResponse = (stateHashArg: string) => {
+      const params = new URLSearchParams({ stateHash: stateHashArg })
+      setIsRetrievingLLMResponse(true)
+      fetch(`/api/assistant?${params}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json'} 
+      })
+      .then((response) => response.json())
+      .then((result) => {
+        console.log('assistant result', result)
+        fetchDumpList();
+        setIsRetrievingLLMResponse(false);
+      })
+      .catch((error) => {
+        console.log('assistant error', error)
+        setIsRetrievingLLMResponse(false);
+      });
+    }
+
+    return {fetchDumpList, handleToolRequest, retrieveLLMResponse}
+  }, [stateHash, setIsRetrievingLLMResponse, autoexecute, autorespond, autotoolfollowup]);
+
+  // =================================================================
+  // SERVER SIDE EVENTS
+  // =================================================================
+  // Use a simple boolean flag that toggles
+// Use a simple boolean flag that toggles
+// Use a simple boolean flag that toggles
+const [shouldRefresh, setShouldRefresh] = useState(false);
+const sseMessagesRef = useRef<unknown[]>([]);
+
+const triggerRefresh = useCallback(() => {
+  setShouldRefresh(prev => !prev);
+}, []);
+
+const handleSSEMessage = useCallback((event: MessageEvent) => {
+  const data = JSON.parse(event.data);
+  sseMessagesRef.current = [...sseMessagesRef.current, data];
+  console.log('all sseMessages', sseMessagesRef.current);
   
+  if (data.type === 'new_message') {
+    console.log('New user message:', data.content);
+    triggerRefresh();
+  }
+}, [triggerRefresh]);
+
+// Separate useEffect for the refresh logic
+useEffect(() => {
+  fetchDumpList();
+}, [shouldRefresh, fetchDumpList]);
+
+// SSE connection useEffect
+useEffect(() => {
+  console.log('Connecting to SSE...');
+  const eventSource = new EventSource('/api/sse');
+  
+  eventSource.onopen = () => {
+    console.log('SSE connection opened');
+  };
+  
+  eventSource.onmessage = handleSSEMessage;
+  
+  eventSource.onerror = (error) => {
+    console.error('SSE error:', error);
+  };
+  
+  return () => {
+    console.log('Closing SSE connection');
+    eventSource.close();
+  };
+}, [handleSSEMessage]);
   const awaitingTranscript = useCallback((uuid: string) => {
     console.log('awaiting transcript for uuid:', uuid);
   }, []);
@@ -79,49 +226,6 @@ export default function Otherpage() {
   // =================================================================
   // TOOL DEFINITIONS
   // =================================================================
-  const start_timerTool = (args: string): string => {
-    try {
-      const args_parsed = JSON.parse(args);
-      const minutes = args_parsed.minutes || 0;
-      const seconds = args_parsed.seconds || 0;
-      return `Successfully started a ${minutes} minute and ${seconds} second timer for ${args_parsed.label || 'general purpose'}`;
-    } catch (e) {
-      console.error("Error parsing start_timer arguments:", e);
-      return "Error starting timer: invalid arguments.";
-    }
-  };
-
-  const tools = {
-    'start_timer': start_timerTool,
-  };
-
-  const handleToolRequest = (toolRequest: ToolCall) => {
-    const tool = tools[toolRequest.function.name as keyof typeof tools];
-    if (!tool) {
-      console.log('Tool not found:', toolRequest.function.name);
-      return;
-    }
-    
-    const toolResponse = tool(toolRequest.function.arguments);
-    const payload = {
-      toolCallId: toolRequest.id,
-      toolResponseText: toolResponse,
-      toolFunctionName: toolRequest.function.name
-    };
-
-    fetch('/api/tools/toolResponse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-      .then(result => result.json())
-      .then(data => {
-        console.log('Result of posting tool response:', data);
-        fetchDumpList();
-      })
-      .catch(error => console.error('Error posting tool response:', error));
-  };
-
   // =================================================================
   // STATE DERIVATION LOGIC
   // =================================================================
@@ -171,28 +275,7 @@ export default function Otherpage() {
   // =================================================================
   // DATA FETCHING AND EFFECTS
   // =================================================================
- const fetchDumpList = useCallback(async () => {
-    try {
-      const response = await fetch('api/transcribe', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await response.json();
-      
-      // Verify hash
-      const computedHash = await calculateMessagesHash(data.messages || []);
-      
-      if (computedHash !== data.messagesHash) {
-        console.error('Hash mismatch!', { server: data.messagesHash, client: computedHash });
-        return;
-      } else {
-        console.log('frontend verified state hash agreement', computedHash);
-        setDumpList(data.messages);
-      }
-    } catch (error) {
-      console.error('Error fetching dump list:', error);
-    }
-  }, []);
+
 
   useEffect(() => {
     fetchDumpList();
@@ -218,7 +301,7 @@ export default function Otherpage() {
   // =================================================================
   // RENDER
   // =================================================================
-  return (
+return (
     <div>
       <audio id="timer-bell-audio" src="/sounds/bell1.wav" preload="auto" />
       
@@ -253,7 +336,34 @@ export default function Otherpage() {
                 />
               </span>
               <span className="ml-2">
-                <AssistantResponse fetchDumpList={fetchDumpList} />
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="autorespond-chat"
+                    checked={autorespond}
+                    onCheckedChange={setAutorespond}
+                  />
+                  <Label htmlFor="autorespond-chat">Autorespond</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="autoexecute-chat"
+                    checked={autoexecute}
+                    onCheckedChange={setAutoexecute}
+                  />
+                  <Label htmlFor="autoexectute-chat">Autoexecute</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="autotoolfollowup-chat"
+                    checked={autotoolfollowup}
+                    onCheckedChange={setAutotoolfollowup}
+                  />
+                  <Label htmlFor="autotoolfollowup-chat">Autotoolfollowup</Label>
+                </div>
+              </span>
+              {/* MODIFIED: The AssistantResponse component is now always visible */}
+              <span className="ml-2">
+                <AssistantResponse retrieveLLMResponse={retrieveLLMResponse} currentStateHash={stateHash} isRetrievingLLMResponse={isRetrievingLLMResponse} />
               </span>
             </div>
             <div className="p-6">
@@ -266,20 +376,6 @@ export default function Otherpage() {
         </TabsContent>
         <TabsContent value="board">
           <div className="h-full flex flex-col w-full">
-            <div className="p-6 w-full flex items-center">
-              <DumperBox fetchDumpList={fetchDumpList} />
-              <span className="ml-2">
-                  <RecordVoiceMessageNonBlocking
-                    fetchDumpList={fetchDumpList}
-                    awaitingTranscript={awaitingTranscript}
-                    startRecordingCallback={startRecordingCallback}
-                    receivedTranscriptCallback={receivedTranscriptCallback}
-                  />
-              </span>
-              <span className="ml-2">
-                <AssistantResponse fetchDumpList={fetchDumpList} />
-              </span>
-            </div>
             <div className="p-6 flex flex-wrap gap-4">
               {derivedState.activeTimers.map(timer => (
                 <CountdownTimer

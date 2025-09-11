@@ -13,7 +13,12 @@ type RecordVoiceMessageNonBlockingProps = {
   receivedTranscriptCallback: (result: TranscribePostDto, uuid: string) => void;
 }
 
-const RecordVoiceMessageNonBlocking = ({ fetchDumpList, awaitingTranscript, startRecordingCallback, receivedTranscriptCallback }: RecordVoiceMessageNonBlockingProps) => {
+const RecordVoiceMessageNonBlocking = ({ 
+  fetchDumpList, 
+  awaitingTranscript,
+  startRecordingCallback,
+  receivedTranscriptCallback,
+  }: RecordVoiceMessageNonBlockingProps) => {
   const [isHeld, setIsHeld] = useState(false);
   const holdStartTime = useRef<number>(0.);
   const holdTimer = useRef<NodeJS.Timeout | null>(null);

@@ -40,6 +40,7 @@ services:
         - AWS_S3_ACCESS_KEY=${AWS_S3_ACCESS_KEY}
         - AWS_REGION=${AWS_REGION}
         - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+        - REDIS_URL=redis://localhost:6379 
     ports:
       - "8000:8000"
     environment:
@@ -60,6 +61,7 @@ services:
       - AWS_S3_ACCESS_KEY=${AWS_S3_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - REDIS_URL=redis://redis:6379
     restart: unless-stopped
     logging:
       driver: "loki"
@@ -71,6 +73,21 @@ services:
     labels:
       - "logging=promtail"
       - "service=nextjs-app"
+    depends_on:
+      - redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    ports:
+      - "8001:8001"
+    volumes:
+      - redis_insight_data:/db
   loki:
     image: grafana/loki:latest
     ports:
@@ -97,3 +114,5 @@ services:
 volumes:
   loki-data:
   grafana-data:
+  redis_data:
+  redis_insight_data:

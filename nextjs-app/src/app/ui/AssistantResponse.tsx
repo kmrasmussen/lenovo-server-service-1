@@ -1,33 +1,23 @@
 "use client";
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
 
 type AssistantResponseProp = {
-  fetchDumpList: () => void
+  retrieveLLMResponse: (stateHash: string) => void;
+  currentStateHash: string | null,
+  isRetrievingLLMResponse: boolean;
 }
-const AssistantResponse = ({ fetchDumpList }: AssistantResponseProp) => {
-  const [isLoading, setIsLoading] = useState(false);
+const AssistantResponse = ({ retrieveLLMResponse, currentStateHash, isRetrievingLLMResponse }: AssistantResponseProp) => {
 
   const onClick = () => {
-    setIsLoading(true)
-    fetch('/api/assistant', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json'} 
-    })
-    .then((response) => response.json())
-    .then((result) => {
-      console.log('assistant result', result)
-      fetchDumpList();
-      setIsLoading(false);
-    })
-    .catch((error) => {
-      console.log('assistant error', error)
-      setIsLoading(false);
-    });
+    if (currentStateHash == null) {
+      console.error('assistant response button: current state hash is null') 
+    } else {
+      retrieveLLMResponse(currentStateHash)
+    }
   }
 
-  return (<Button disabled={isLoading} onClick={onClick}>
-    {isLoading ? '...' : 'get AI input'}
+  return (<Button disabled={isRetrievingLLMResponse} onClick={onClick}>
+    {isRetrievingLLMResponse ? '...' : 'get AI input'}
     </Button>)
 };
 

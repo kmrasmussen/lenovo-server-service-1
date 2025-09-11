@@ -6,6 +6,8 @@ import { Message, NormalMessage, ToolResponseMessage } from '@/app/types/chatCom
 import { MessageJoinedToolRequestsAndResponsesRow, ToolResponsesRow } from '@/app/types/db';
 import { TranscribePostDto} from '@/app/types/routeDtos';
 import { calculateMessagesHash } from '@/app/lib/messageHash';
+import { redis } from '@/app/lib/redis';
+
 const sql = neon(process.env.DATABASE_URL!);
 
 const openai = new OpenAI();
@@ -136,6 +138,15 @@ const POST = async (req: NextRequest) => {
      VALUES (${userId}, ${transcription.text})
      RETURNING id, transcript, created_at
     `;
+
+    redis.publish(`user:${userId}:messages`, JSON.stringify({
+      type: 'new_user_message',
+      content: transcription.text,
+      timestamp: new Date().toISOString()
+    })).catch(error => {
+      console.error('Redis publish failed:', error);
+      // Don't throw - just log the error
+    });
     
     const endpointResponse: TranscribePostDto = {
       success: true,

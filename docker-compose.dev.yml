@@ -47,3 +47,21 @@ services:
       - AWS_S3_ACCESS_KEY=${AWS_S3_ACCESS_KEY}
       - AWS_REGION=${AWS_REGION}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - REDIS_URL=redis://redis:6379
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    ports:
+      - "8001:8001"
+    volumes:
+      - redis_insight_data:/db
+
+volumes:
+  redis_data:
+  redis_insight_data:

@@ -3,6 +3,8 @@ import { auth } from '@/auth';
 import { neon } from '@neondatabase/serverless';
 import { ChatCompletion, ToolCall, ChatCompletionTool, ChatCompletionRequestBody } from '@/app/types/chatCompletions';
 import { getChatHistory } from '@/app/api/transcribe/route';
+import { redis } from '@/app/lib/redis';
+import { calculateMessagesHash } from '@/app/lib/messageHash';
 const sql = neon(process.env.DATABASE_URL!);
 
 const getOpenRouterCompletion = async (body: ChatCompletionRequestBody) => {
@@ -18,11 +20,19 @@ const getOpenRouterCompletion = async (body: ChatCompletionRequestBody) => {
   return data as ChatCompletion;
 }
 
-const GET = async () => {
+const GET = async (request: Request) => {
   const session = await auth();
   
   if (!session?.user?.id) {
     return NextResponse.json({ message: "not authenticated", success: false}, {status: 401});
+  }
+  
+  const { searchParams } = new URL(request.url);
+  const queryParamStateHash = searchParams.get('stateHash');
+  console.log('State hash:', queryParamStateHash);
+  if (!queryParamStateHash) {
+    console.error('/api/assitant no state hash query param found');
+    return NextResponse.json({ success: false, message: '/api/assitant no state hash query param found' }, { status: 400 });
   }
 
   try {
@@ -80,6 +90,13 @@ LIMIT 10` as MessageJoinedToolRequestsRow[];
     })
     */
     const messages = await getChatHistory(sql, userId); // messages.reverse();
+    const messagesHash = await calculateMessagesHash(messages);
+    if (messagesHash != queryParamStateHash) {
+      const errorMsg = `hash of messages retrieved from db do not agree with hash passed as query param. db hash ${messagesHash}, queryparam: ${queryParamStateHash}`;
+      console.error(errorMsg);
+      return NextResponse.json({ success: false, message: `/api/assitant ${errorMsg}` }, { status: 400 });
+    }
+
     console.log(messages);
     console.log('okay getting response for this convo:', messages);
     
@@ -130,6 +147,15 @@ LIMIT 10` as MessageJoinedToolRequestsRow[];
         console.log('tool call insertion results', toolCallInsertionResults);
       }
     }
+
+    redis.publish(`user:${userId}:messages`, JSON.stringify({
+      type: 'new_message',
+      content: responseContent?.content ?? '',
+      timestamp: new Date().toISOString()
+    })).catch(error => {
+      console.error('Redis publish failed:', error);
+      // Don't throw - just log the error
+    });
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { neon } from '@neondatabase/serverless';
+import { redis } from '@/app/lib/redis';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -29,6 +30,15 @@ const POST = async (req: NextRequest) => {
      VALUES (${userId}, 'user', ${text})
      RETURNING id, message_role, text_content, created_at 
     `;
+
+    redis.publish(`user:${userId}:messages`, JSON.stringify({
+      type: 'new_message',
+      content: text,
+      timestamp: new Date().toISOString()
+    })).catch(error => {
+      console.error('Redis publish failed:', error);
+      // Don't throw - just log the error
+    });
 
     return NextResponse.json({ success: true, insertionResult: insertionResult });
   } catch(error) {
