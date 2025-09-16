@@ -3,6 +3,8 @@ use blake3;
 use chat_completions::{ChatCompletion, ChatCompletionRequestBody,ChatCompletionTool, ToolResponseMessage};
 pub mod chat_completions;
 pub mod utils;
+pub mod stt;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MachineOutput {
@@ -17,8 +19,15 @@ pub struct ChatCompletionRequestSideEffect {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioTranscriptionRequestSideEffect {
+  pub audio_data: Vec<u8>,
+  pub callback_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SideEffect {
   ChatCompletionRequest(ChatCompletionRequestSideEffect),
+  AudioTranscriptionRequest(AudioTranscriptionRequestSideEffect),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +38,9 @@ pub enum ExecutionPolicy {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Event {
     UserTextSubmission { text: String },
+    AudioSubmission { data: Vec<u8> },
+    RequestAudioSubmissionTranscription {},
+    TranscriptionResult { text: String },
     Receipt  { text: String },
     RequestNonstreamingAssistantMessage {},
     AssistantMessageGenerationStartedEvent { completions_endpoint: String, request_body: ChatCompletionRequestBody},

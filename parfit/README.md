@@ -27,7 +27,17 @@
   󰂺 README.md
 
 # Running backend
-cargo watch -c -x 'run --bin backend'
+cargo watch -c -x 'run --bin backend-ws'
+
+if it says      Running `target/debug/backend-ws`
+starting parfit server
+
+thread 'main' panicked at backend-ws/src/main.rs:54:60:
+called `Result::unwrap()` on an `Err` value: Os { code: 98, kind: AddrInUse, message: "Address already in use" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+[Finished running. Exit status: 101]
+
+then find pid of process running on port 8005 lsof -i :8005 and kill it with kill <pid>
 
 # Running frontend
 cd frontend-wasm

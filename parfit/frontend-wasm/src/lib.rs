@@ -244,9 +244,9 @@ pub fn get_tool_schema() -> ChatCompletionTool {
   start_timer_tool_schema
 }
 
-
 #[wasm_bindgen]
-pub fn port_text_message(text: String) -> Result<(), JsValue>  {
+pub fn load_app(app_name: String) -> Result<(), JsValue> {
+  println!("loading app {}", app_name);
   let tool_scope = Event::ChatCompletionToolSchemaScope {};
   let tool_scope_ec = add_event_to_heap(tool_scope);
   send_latest_event()?;
@@ -268,6 +268,11 @@ pub fn port_text_message(text: String) -> Result<(), JsValue>  {
   }; 
   add_event_to_heap(execution_policy);
   send_latest_event()?;
+  Ok(())
+}
+
+#[wasm_bindgen]
+pub fn port_text_message(text: String) -> Result<(), JsValue>  {
   add_user_submission_local_heap(text);
   send_latest_event()?;
   request_nonstreaming_assistant_message();
@@ -315,4 +320,17 @@ pub fn request_nonstreaming_assistant_message() -> String {
     let event = Event::RequestNonstreamingAssistantMessage { };
     let container = add_event_to_heap(event);
     serde_json::to_string(&container).unwrap()
+}
+
+#[wasm_bindgen]
+pub fn port_audio_message(data: &[u8]) -> Result<(), JsValue> {
+    // Create the new AudioSubmission event with the provided data
+    let audio_event = Event::AudioSubmission { data: data.to_vec() };
+    add_event_to_heap(audio_event);
+    send_latest_event()?;
+
+    let request_transcription_event = Event::RequestAudioSubmissionTranscription { };
+    add_event_to_heap(request_transcription_event);
+    send_latest_event()?;
+    Ok(())
 }

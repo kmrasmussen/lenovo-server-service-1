@@ -1,14 +1,15 @@
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use futures_util::{StreamExt, SinkExt};
-use shared::{append_event,EventContainer,append_event_only_hash,Event,MachineOutput,SideEffect, ExecutionPolicy, ChatCompletionRequestSideEffect};
+use shared::{append_event,EventContainer,append_event_only_hash,Event,MachineOutput,SideEffect, ExecutionPolicy, ChatCompletionRequestSideEffect, AudioTranscriptionRequestSideEffect};
 use shared::chat_completions::{ChatCompletionRequestBody, ChatCompletion, ChatCompletionTool, ChatMessage, ToolResponseMessage, ToolCall};
+use shared::stt::{WhisperTranscriptionResponse};
 use tokio::sync::{RwLock, mpsc, watch};
 use std::sync::{Arc};
 use std::collections::HashMap;
 use shared::utils::{event_containers_to_messages};
 use std::time::{SystemTime, UNIX_EPOCH};
-
+use reqwest::multipart;
 use gymbro::{list_exercises};
 
 
@@ -188,6 +189,22 @@ fn machine(state: &HeapState, eval_hash : String) -> Option<MachineOutput> {
     None
   };
 
+  fn backtrace_audio_data(state: &HeapState, from_hash: String) -> Option<Vec<u8>> {
+    let mut current_hash = Some(from_hash);
+    while let Some(hash) = current_hash {
+        if let Some(&index) = state.hash_to_index.get(&hash) {
+            let ec = &state.ecs[index];
+            if let Event::AudioSubmission { data } = &ec.event {
+                return Some(data.clone());
+            }
+            current_hash = ec.prev_hash.clone();
+        } else {
+            break;
+        }
+    }
+    None
+  }
+
   match &eval_ec.event {
     Event::UserTextSubmission {..} => {
       let has_receipt_successor = successors
@@ -208,6 +225,17 @@ fn machine(state: &HeapState, eval_hash : String) -> Option<MachineOutput> {
         let receipt_ec = append_event(&eval_ec, &receipt);
         return Some(MachineOutput { ecs: Some(vec![receipt_ec]), side_effect: None });
       }
+    }
+    Event::TranscriptionResult { text } => {
+      println!("parfit machine is processing a transcription result gotta make that usersubmission");
+      let user_submission_event = Event::UserTextSubmission { text: text.to_string() };
+      let user_submission_ec = append_event(&eval_ec, &user_submission_event);
+      let request_assistant_response = Event::RequestNonstreamingAssistantMessage {};
+      let request_assistant_response_ec = append_event(&user_submission_ec, &request_assistant_response);
+      return Some(MachineOutput { 
+        ecs: Some(vec![user_submission_ec, request_assistant_response_ec]),
+        side_effect: None 
+      });
     }
     Event::RequestNonstreamingAssistantMessage {} => {
       println!("hey");
@@ -254,6 +282,39 @@ fn machine(state: &HeapState, eval_hash : String) -> Option<MachineOutput> {
         let completion_side_effect = SideEffect::ChatCompletionRequest(completion_side_effect);
         return Some(MachineOutput { ecs: Some(vec![genstarted_ec]), side_effect : Some(completion_side_effect) });
       }
+    }
+    Event::RequestAudioSubmissionTranscription {} => {
+        println!("Machine processing RequestAudioSubmissionTranscription");
+
+        // We need to check if we already have a result for this request to avoid re-processing
+        let has_result_successor = successors
+            .get(&eval_ec.curr_hash)
+            .unwrap_or(&vec![])
+            .iter()
+            .any(|succ_hash| {
+                if let Some(&idx) = hash_to_index.get(succ_hash) {
+                    matches!(ecs[idx].event, Event::TranscriptionResult { .. })
+                } else { false }
+            });
+
+        if has_result_successor {
+            println!("Transcription result already exists, skipping.");
+            return None;
+        }
+        
+        // Find the audio data by looking backwards from the current event
+        if let Some(audio_data) = backtrace_audio_data(state, eval_ec.curr_hash.clone()) {
+            println!("Found audio data ({} bytes), creating side effect.", audio_data.len());
+            let transcription_side_effect = SideEffect::AudioTranscriptionRequest(
+                AudioTranscriptionRequestSideEffect {
+                    audio_data,
+                    callback_hash: eval_ec.curr_hash.clone(),
+                }
+            );
+            return Some(MachineOutput { ecs: None, side_effect: Some(transcription_side_effect) });
+        } else {
+            println!("Error: Could not find corresponding audio data for transcription request.");
+        }
     }
     Event::NonstreamingChatCompletion { chat_completion } => {
       if let Some(first_msg) = chat_completion.choices
@@ -359,6 +420,74 @@ async fn handle_echo_connection(stream: TcpStream) {
     while let Some(se) = sideeffector_receiver.recv().await {
       println!("sideeffector received {:?}", se);
       match se {
+        SideEffect::AudioTranscriptionRequest(transcription_request) => {
+            println!("Side-effector handling audio transcription request.");
+            let client = reqwest::Client::new();
+            let api_key = std::env::var("OPENAI_API_KEY")
+                .expect("OPENAI_API_KEY must be set");
+
+            // The audio data needs to be wrapped in a part for multipart form upload
+            let audio_part = multipart::Part::bytes(transcription_request.audio_data)
+                .file_name("audio.webm")
+                .mime_str("audio/webm").unwrap();
+            
+            let form = multipart::Form::new()
+                .text("model", "whisper-1")
+                .part("file", audio_part);
+
+            let response_result = client
+                .post("https://api.openai.com/v1/audio/transcriptions")
+                .header("Authorization", format!("Bearer {}", api_key))
+                .multipart(form)
+                .send()
+                .await;
+
+          match response_result {
+                Ok(response) => {
+                    let status = response.status();
+                    match response.text().await {
+                        Ok(raw_text) => {
+                            if !status.is_success() {
+                                println!("Whisper API request failed with status {}. Body: {}", status, raw_text);
+                                return; // Stop processing on failure
+                            }
+
+                            println!("Whisper API success. Raw response: {}", raw_text);
+
+                            // Now, parse the raw text using our new structs
+                            match serde_json::from_str::<WhisperTranscriptionResponse>(&raw_text) {
+                                Ok(parsed_response) => {
+                                    // Success! Extract the clean text.
+                                    println!("Successfully parsed transcription: '{}'", parsed_response.text);
+
+                                    let result_event = Event::TranscriptionResult {
+                                        text: parsed_response.text, // Use the parsed text here
+                                    };
+
+                                    let result_ec = append_event_only_hash(
+                                        transcription_request.callback_hash,
+                                        &result_event
+                                    );
+                                    sideeffector_manager_heap_sender_clone.send(result_ec).await.unwrap();
+                                }
+                                Err(e) => {
+                                    // This can happen if OpenAI changes their API response format.
+                                    println!("Failed to deserialize Whisper JSON response: {}. Raw text was: {}", e, raw_text);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("Could not read response body from OpenAI: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Error making request to Whisper API: {}", e);
+                }
+            } 
+
+        }
+
         SideEffect::ChatCompletionRequest(chat_completion_request_side_effect) => {
           println!("wow got chat completion request {:?}", chat_completion_request_side_effect);
           

@@ -115,6 +115,7 @@ services:
     environment:
       - RUST_LOG=info
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     ports:
       - "8005:8005"
     restart: unless-stopped
