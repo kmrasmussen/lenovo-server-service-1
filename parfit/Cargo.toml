@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "shared",
+    "frontend-wasm",
+    "backend-ws",
+    "apps/echo-server", "apps/gymbro"]
+
+resolver = "2"

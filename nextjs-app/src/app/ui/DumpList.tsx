@@ -7,8 +7,9 @@ import { Message, NormalMessage, ToolResponseMessage, ToolCall } from '@/app/typ
 import { DisplayMessage, AssociatedToolResponses } from '@/app/types/frontendTypes';
 
 type DumpListProps = {
-  dumpList: Message[],
-  handleToolRequest: (toolRequest: ToolCall) => void,
+  dumpList: Message[];
+  handleToolRequest: (toolRequest: ToolCall, stateHash: string) => void;
+  currentStateHash: string | null;
 }
 
 const DumpList = (props: DumpListProps) => {
@@ -58,7 +59,7 @@ const DumpList = (props: DumpListProps) => {
     <ul className="space-y-2 p-0">
       {
         displayList.map((item, idx) => (<DumpListItem
-          handleToolRequest={props.handleToolRequest} key={idx} item={item} />))
+          handleToolRequest={props.handleToolRequest} currentStateHash={props.currentStateHash} key={idx} item={item} />))
       }
     </ul>
   );

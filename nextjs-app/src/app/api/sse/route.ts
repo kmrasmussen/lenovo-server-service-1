@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       await subscriber.connect();
       
       // Subscribe to user's message channel
-      const channel = `user:${session.user.id}:messages`;
+      const channel = `user:${session.user.id}:events`;
       await subscriber.subscribe(channel, (message, receivedChannel) => {
         if (receivedChannel === channel) {
           const data = `data: ${message}\n\n`;

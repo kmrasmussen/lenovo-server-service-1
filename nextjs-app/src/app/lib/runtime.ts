@@ -28,8 +28,7 @@ export const runtime = (
   }
   if (previousStateHash === currentStateHash) {
     console.log('runtime-early-exit-previousStateHash-equals-currentStateHash');
-    console.log('but doing anyway');
-    //return;
+    return;
   }
   if (messages.length == 0) {
     console.log('runtime-early-exit-messages-length-is-0');
@@ -61,7 +60,6 @@ export const runtime = (
     console.log('runtime-lastmessage-is-user-autotoolfollowup-active-calling-retrieveLLMresponse');
     retrieveLLMResponse(currentStateHash);
     return;
-
   }
 
   // Now if it is not a user message or tool, then we only want to do something if autoexecute is on

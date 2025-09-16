@@ -1,0 +1,30 @@
+FROM node:18-alpine
+# Install Rust and wasm-pack
+RUN apk add --no-cache curl build-base
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN cargo install wasm-pack
+
+ARG NEXT_PUBLIC_PARFIT_BACKEND_WEBSOCKET_URL
+
+WORKDIR /workspace
+
+COPY . .
+
+# Build the WASM
+WORKDIR /workspace/frontend-wasm
+RUN wasm-pack build --target web --out-dir next/public/pkg
+
+# Now build the Next.js app
+WORKDIR /workspace/frontend-wasm/next
+
+# ===> CHANGE THIS LINE <===
+# Add `CI=true` before the pnpm install command to run it in a non-interactive mode.
+RUN npm install -g pnpm && CI=true pnpm install
+# ===========================
+
+ENV NEXT_PUBLIC_PARFIT_BACKEND_WEBSOCKET_URL=$NEXT_PUBLIC_PARFIT_BACKEND_WEBSOCKET_URL
+RUN pnpm build
+
+EXPOSE 3000
+CMD ["pnpm", "start"]

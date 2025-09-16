@@ -6,11 +6,14 @@ import { Input } from '@/components/ui/input';
 
 type DumperBoxProps = {
   fetchDumpList: () => void;
+  submitText: (text: string) => void;
 }
 const DumperBox = (props : DumperBoxProps) => {
   const [dumpValue, setDumpValue] = useState('');
 
   const submitDump = (content: string) => {
+    props.submitText(content);
+    /*
     console.log('ok sending dump to server now', content);
     const formData = new FormData();
     formData.append('text', content);
@@ -27,6 +30,7 @@ const DumperBox = (props : DumperBoxProps) => {
       }
     })
     .catch((error) => console.log('error fetching dump list', error));
+    */
   }
   
 

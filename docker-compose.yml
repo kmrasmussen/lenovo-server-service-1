@@ -110,6 +110,43 @@ services:
     restart: unless-stopped
     depends_on:
       - loki
+  parfit-backend-ws:
+    build: ./parfit
+    environment:
+      - RUST_LOG=info
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    ports:
+      - "8005:8005"
+    restart: unless-stopped
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-batch-size: "100"
+        loki-retries: "2"
+        loki-timeout: "1s"
+    labels:
+      - "logging=promtail"
+      - "service=parfit-backend-ws"
+  
+  parfit-next:
+    build: 
+      context: ./parfit
+      dockerfile: Dockerfile.frontend-wasm
+      args:
+        - NEXT_PUBLIC_PARFIT_BACKEND_WEBSOCKET_URL=${NEXT_PUBLIC_PARFIT_BACKEND_WEBSOCKET_URL}
+    ports:
+      - "8002:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_PARFIT_BACKEND_WEBSOCKET_URL=${NEXT_PUBLIC_PARFIT_BACKEND_WEBSOCKET_URL}
+    restart: unless-stopped
+    logging:
+      driver: "loki"
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-batch-size: "100"
+        loki-retries: "2"
 
 volumes:
   loki-data:

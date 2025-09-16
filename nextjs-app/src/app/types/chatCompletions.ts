@@ -12,7 +12,7 @@ export type ToolResponseMessage = {
   content: string,
   name: string, // function name
   tool_call_id: string, // given by OR
-  _createdAt: string
+  _createdAt: string,
 }
 export type NormalMessage = {
   role: string,
@@ -54,3 +54,50 @@ export type ChatCompletionRequestBody = {
   tools: ChatCompletionTool[];
   messages: Message[];
 };
+
+export type UserTextSubmissionEvent = {
+  type: 'UserTextSubmissionEvent';
+  text: string;
+  timestamp: number; 
+}
+export type UserTextSubmissionReceiptEvent = {
+  type: 'UserTextSubmissionReceiptEvent';
+  text: string;
+  timestamp: number; 
+}
+export type RequestAssistantMessageEvent = {
+  type: 'RequestAssistantMessageEvent';
+  text: 'ready',
+  timestamp: number;
+}
+export type RequestToolExecutionEvent = {
+  type: 'RequestToolExecutionEvent';
+  text: 'please',
+  timestamp: number;
+}
+export type RequestToolExecutionReceiptEvent = {
+  type: 'RequestToolExecutionReceiptEvent';
+  text: 'willdo',
+  timestamp: number;
+}
+export type AssistantMessageGenerationStartedEvent = {
+  type: 'AssistantMessageGenerationStartedEvent';
+  text: 'generating',
+  timestamp: number;
+}
+export type  AssistantMessageEvent = {
+  type: 'AssistantMessageEvent';
+  completion: ChatCompletion
+  timestamp: number;
+}
+export type ToolResponseEvent = {
+  type: 'ToolResponseEvent';
+  message: ToolResponseMessage;
+  timestamp: number;
+}
+export type Event = RequestToolExecutionReceiptEvent | RequestToolExecutionEvent | ToolResponseEvent | AssistantMessageEvent | AssistantMessageGenerationStartedEvent | UserTextSubmissionEvent | UserTextSubmissionReceiptEvent | RequestAssistantMessageEvent; 
+export type EventContainer = {
+  event: Event
+  prevEventHash: string | null,
+  currentEventHash: string
+}
