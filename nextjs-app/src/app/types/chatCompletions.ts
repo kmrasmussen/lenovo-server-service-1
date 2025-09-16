@@ -70,17 +70,32 @@ export type RequestAssistantMessageEvent = {
   text: 'ready',
   timestamp: number;
 }
+export type RequestToolExecutionEvent = {
+  type: 'RequestToolExecutionEvent';
+  text: 'please',
+  timestamp: number;
+}
+export type RequestToolExecutionReceiptEvent = {
+  type: 'RequestToolExecutionReceiptEvent';
+  text: 'willdo',
+  timestamp: number;
+}
 export type AssistantMessageGenerationStartedEvent = {
   type: 'AssistantMessageGenerationStartedEvent';
   text: 'generating',
   timestamp: number;
 }
-export type AssistantMessageEvent = {
+export type  AssistantMessageEvent = {
   type: 'AssistantMessageEvent';
   completion: ChatCompletion
   timestamp: number;
 }
-export type Event = AssistantMessageEvent | AssistantMessageGenerationStartedEvent | UserTextSubmissionEvent | UserTextSubmissionReceiptEvent | RequestAssistantMessageEvent; 
+export type ToolResponseEvent = {
+  type: 'ToolResponseEvent';
+  message: ToolResponseMessage;
+  timestamp: number;
+}
+export type Event = RequestToolExecutionReceiptEvent | RequestToolExecutionEvent | ToolResponseEvent | AssistantMessageEvent | AssistantMessageGenerationStartedEvent | UserTextSubmissionEvent | UserTextSubmissionReceiptEvent | RequestAssistantMessageEvent; 
 export type EventContainer = {
   event: Event
   prevEventHash: string | null,

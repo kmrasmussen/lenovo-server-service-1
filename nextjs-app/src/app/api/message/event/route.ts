@@ -2,21 +2,63 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { neon } from '@neondatabase/serverless';
 import { redis } from '@/app/lib/redis';
-import { AssistantMessageEvent, EventContainer, UserTextSubmissionReceiptEvent, AssistantMessageGenerationStartedEvent, UserTextSubmissionEvent, Message } from '@/app/types/chatCompletions';
+import { ToolCall, AssistantMessageEvent, ToolResponseMessage, RequestToolExecutionReceiptEvent, ToolResponseEvent, EventContainer, UserTextSubmissionReceiptEvent, AssistantMessageGenerationStartedEvent, UserTextSubmissionEvent, Message } from '@/app/types/chatCompletions';
 import { calculateEventHash } from '@/app/lib/messageHash'
 import { getCompletion } from '@/app/lib/completions';
 const sql = neon(process.env.DATABASE_URL!);
+import { tools } from '@/app/lib/serverSideTools';
+
+type FetchEventContainerFromDbRow = {
+  id: number;
+  inserted_at: number;
+  raw_event_container_json: EventContainer,
+  prev_event_hash: string,
+  current_event_hash: string
+}
+const fetchEventContainerFromDb = async (hash: string, userId: number): Promise<EventContainer | null> => {
+  const result = await sql`
+SELECT id, user_id, inserted_at, raw_event_container_json, prev_event_hash, current_event_hash 
+FROM event_containers
+WHERE current_event_hash = ${hash}
+AND user_id = ${userId} 
+  ` as FetchEventContainerFromDbRow[];
+  if (result.length == 1) {
+    return result[0].raw_event_container_json as EventContainer;
+  } else {
+    return null;
+  }
+}
 
 const eventContainerChainToChatMessages = (eventContainers: EventContainer[]): Message[] => {
-  return eventContainers
-    .filter(container => container.event.type === 'UserTextSubmissionEvent')
-    .map(container => ({
-      role: 'user',
-      content: (container.event as UserTextSubmissionEvent).text,
-      tool_calls: null,
-      _createdAt: new Date(container.event.timestamp).toISOString()
-    }));
-}
+  console.log('eventContainerChainToChatMessages')
+  console.log(JSON.stringify(eventContainers,null,2));
+  return eventContainers.map(container => {
+    if (container.event.type === 'UserTextSubmissionEvent') {
+      return {
+        role: 'user',
+        content: (container.event as UserTextSubmissionEvent).text,
+        tool_calls: null,
+        _createdAt: new Date(container.event.timestamp).toISOString()
+      };
+    }
+    
+    if (container.event.type === 'AssistantMessageEvent') {
+      const firstChoice = container.event.completion.choices?.[0];
+      if (firstChoice) {
+        return {
+          ...firstChoice.message,
+          _createdAt: new Date(container.event.timestamp).toISOString()
+        };
+      }
+    }
+    
+    if (container.event.type === 'ToolResponseEvent') {
+      return container.event.message;
+    }
+    
+    return null;
+  }).filter(Boolean) as Message[];
+};
 
 type InsertEventContainerInDatabaseType = {
   id: number,
@@ -68,6 +110,16 @@ const sendEventContainerToClient = (userId: number, eventContainer: EventContain
   });
 }
 
+const handleToolRequestServerSide = (toolRequest: ToolCall): string | null => {
+  const tool = tools[toolRequest.function.name as keyof typeof tools];
+  if (!tool) {
+    console.log('Tool not found:', toolRequest.function.name);
+    return null;
+  }
+  
+  const toolResponse = tool(toolRequest.function.arguments);
+  return toolResponse
+}
 const POST = async (req: NextRequest) => {
   const session = await auth();
   
@@ -112,6 +164,7 @@ const POST = async (req: NextRequest) => {
       }
       const insertedHash = insertionResult.current_event_hash;
       const eventChain = await getEventChain(insertionResult.current_event_hash, userId);
+      console.log('eventChain', JSON.stringify(eventChain, null,2));
       const messages = eventContainerChainToChatMessages(eventChain); 
       const generationStartedEvent : AssistantMessageGenerationStartedEvent = {
         type: 'AssistantMessageGenerationStartedEvent',
@@ -136,7 +189,85 @@ const POST = async (req: NextRequest) => {
         currentEventHash: await calculateEventHash(generationStartedEventContainer.currentEventHash, assistantMessageEvent)
       }
       sendEventContainerToClient(userId, completionEventContainer);
+      const completionInsertionResult = await insertEventContainerInDatabase(userId, completionEventContainer);
+      if (completionInsertionResult == null) {
+        return NextResponse.json({ success: false, message: 'some kind of error on insertion of completion', insertionResult: insertionResult }, { status: 401 });
+      }
+      const completionInsertedHash = completionInsertionResult.current_event_hash;
+      console.log('inserted completion with hash', completionInsertedHash);
       return NextResponse.json({ success: true, message: 'got an eventchain', completion: completion, messages: messages, eventChain: eventChain, insertionResult: insertionResult }, { status: 200 });
+    }
+    else if (eventContainer.event.type == 'RequestToolExecutionEvent') {
+      console.log('got request tool execution event');
+      const receiptEvent : RequestToolExecutionReceiptEvent  = {
+        type: 'RequestToolExecutionReceiptEvent',
+        text: 'willdo',
+        timestamp: Date.now()
+      };
+      const receiptContainer : EventContainer = {
+        event: receiptEvent,
+        prevEventHash: eventContainer.currentEventHash,
+        currentEventHash: await calculateEventHash(eventContainer.currentEventHash, receiptEvent),
+      }
+      if (eventContainer.prevEventHash == null) {
+        console.log('cannot do toolex, because reqtoolex eventContainer.prevEventHash was null');
+        return NextResponse.json({ success: false, message: '32498234' }, { status: 401 });
+      }
+      const eventContainerWithToolCalls = await fetchEventContainerFromDb(eventContainer.prevEventHash, userId);
+      if (eventContainerWithToolCalls == null) {
+        console.log('cannot do toolex, because the necessary eventocntainer was not found');
+        return NextResponse.json({ success: false, message: '3684532178' }, { status: 401 });
+      }
+      console.log('eventcontainerwithtoolcalls', JSON.stringify(eventContainerWithToolCalls, null,2));
+      const assistantMessageEvent = eventContainerWithToolCalls.event as AssistantMessageEvent;
+      if (assistantMessageEvent.completion.choices == null) {
+        console.log('cannot do toolex, because the necessary eventocntainer did not have a message');
+        return NextResponse.json({ success: false, message: '7312586986' }, { status: 401 });
+      }
+      const message = assistantMessageEvent.completion.choices[0].message
+      if (message.role === 'assistant' && 'tool_calls' in message && message.tool_calls) {
+        console.log('sending toolex receipt to client');
+        sendEventContainerToClient(userId, receiptContainer);
+        console.log('done sending');
+
+        console.log('runtime-last-message-has-toolcall');
+        console.log(`Runtime found ${message.tool_calls.length} tool_calls in the last message.`);
+        
+        // Execute each tool call.
+        let prevHash = receiptContainer.currentEventHash;
+        for(let i = 0; i < message.tool_calls.length; i++) {
+          const toolCall = message.tool_calls[0];
+          console.log(`Runtime is executing tool: ${toolCall.function.name} with id: ${toolCall.id}`);
+          console.log(`runtime-executing-tool-call-${toolCall.function.name}`);
+          const toolResponseContent = handleToolRequestServerSide(toolCall);
+          if (toolResponseContent == null) {
+            // Add an event for this!
+            return;
+          }
+          const toolResponseMessage : ToolResponseMessage = {
+            role: 'tool',
+            content: toolResponseContent,
+            name: toolCall.function.name, // function name
+            tool_call_id: toolCall.id, // given by OR
+            _createdAt: Date.now().toString(), 
+          }
+          const toolResponseEvent : ToolResponseEvent = {
+           type: 'ToolResponseEvent',
+           message: toolResponseMessage,
+           timestamp: Date.now()
+          }
+          const toolResponseEventContainer : EventContainer = {
+            event: toolResponseEvent,
+            prevEventHash: prevHash,
+            currentEventHash: await calculateEventHash(prevHash, toolResponseEvent) 
+          }
+          sendEventContainerToClient(userId, toolResponseEventContainer);
+          const toolResponseInsertionResult = await insertEventContainerInDatabase(userId, toolResponseEventContainer);
+          console.log('tool response insertion result', toolResponseInsertionResult);
+          prevHash = toolResponseEventContainer.currentEventHash
+        }
+      }
+      return NextResponse.json({ success: true, message: 'thanks for requesting toolex' }, { status: 200 });
     }
     else {
       console.error('unknown event type')
@@ -147,6 +278,5 @@ const POST = async (req: NextRequest) => {
       return NextResponse.json({ success: false, message: error }, { status: 400 });
   }
 };
-
 
 export { POST };

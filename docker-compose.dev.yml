@@ -61,7 +61,25 @@ services:
       - "8001:8001"
     volumes:
       - redis_insight_data:/db
-
+  parfit-backend-ws:
+    build: ./parfit
+    environment:
+      - RUST_LOG=info
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    ports:
+      - "8005:8005"
+    volumes:
+      - ./parfit:/workspace
+  parfit-next:
+    build: 
+      context: ./parfit
+      dockerfile: frontend-wasm/next/Dockerfile
+    ports:
+      - "8002:3000"
+    volumes:
+      - ./parfit/frontend-wasm/next:/app
+    environment:
+      - NODE_ENV=development
 volumes:
   redis_data:
   redis_insight_data:

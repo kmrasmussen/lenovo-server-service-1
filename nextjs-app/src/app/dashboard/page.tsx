@@ -6,7 +6,7 @@ import CountdownTimer from '@/app/ui/widgets/CountdownTimer';
 import AssistantResponse from '@/app/ui/AssistantResponse';
 import RecordVoiceMessageNonBlocking from '@/app/ui/RecordVoiceMessageNonBlocking';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ToolCall, Message, RequestAssistantMessageEvent, ToolResponseMessage, EventContainer, UserTextSubmissionEvent } from '@/app/types/chatCompletions';
+import { ToolCall, Message, AssistantMessageEvent, RequestAssistantMessageEvent, RequestToolExecutionEvent, ToolResponseMessage, EventContainer, UserTextSubmissionEvent } from '@/app/types/chatCompletions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { calculateMessagesHash, calculateEventHash } from '@/app/lib/messageHash';
@@ -35,6 +35,7 @@ export default function Otherpage() {
   // STATE & CALLBACKS
   // =================================================================
   const [dumpList, setDumpList] = useState<Message[]>([]);
+  const [heapIntegrity, setHeapIntegrity] = useState<string>('notcomputed');
   const [eventHeap, setEventHeap] = useState<EventContainer[]>([]);
   const [stateHash, setStateHash] = useState<string | null>(null);
   const [autorespond, setAutorespond] = useState<boolean>(true);
@@ -44,6 +45,59 @@ export default function Otherpage() {
     activeTimers: [],
   });
   const [isRetrievingLLMResponse, setIsRetrievingLLMResponse] = useState(false);
+
+  const getEventHeapIntegrity = (currentEventHeap: EventContainer[]): string => {
+    console.log('inside getEventHeapIntegrity');
+    const result = currentEventHeap.length;
+    console.log('HEAP LENGTH', currentEventHeap.length);
+    if (currentEventHeap.length == 0) {
+      console.log('HEAPINTEG EMPTY');
+      return 'heapempty';
+    }
+    const index0event = currentEventHeap[0]
+    
+    console.log('HEAP index 0 hash', currentEventHeap[0].prevEventHash, currentEventHeap[0].currentEventHash);
+    if (index0event.prevEventHash != null) {
+      return 'index0notnull';
+    }
+    
+    if (currentEventHeap.length == 1) {
+      return 'onlyOneEvent';
+    }
+    for (let i = 0; i < currentEventHeap.length - 1; i++) {
+      const currentHash = currentEventHeap[i].currentEventHash;
+      const nextHash = currentEventHeap[i].currentEventHash
+      if (currentHash != nextHash) {
+        return `found linearity break at position ${i}, ${currentHash} vs next ${nextHash}`;
+      }
+    }
+    return 'normal';
+  };
+
+  useEffect(() => {
+    console.log('eventHeap useEffect');
+    const computedIntegrity = getEventHeapIntegrity(eventHeap)
+    setHeapIntegrity(computedIntegrity);
+    if (computedIntegrity != 'normal') {
+      return;
+    }
+    console.log('sdfasdf');
+    if (eventHeap.length == 0) {
+      return;
+    }
+    const latestEventContainer = eventHeap[eventHeap.length - 1];
+    console.log('heyo', latestEventContainer);
+    if (latestEventContainer.event.type == 'UserTextSubmissionReceiptEvent') {
+      console.log('LATEST EVENT IS USERTextsumbssionReceiptEVENT why NOT LIKE GET A RESPONSE YOU KNOW!?');
+      addRequestLLMResponseEvent();
+      console.log('OK i deed');
+    }
+    else if (latestEventContainer.event.type == 'AssistantMessageEvent') {
+      const assistantMessageEvent = latestEventContainer.event as AssistantMessageEvent;
+
+
+    }
+  }, [eventHeap]);
 
   const insertInEventHeap = useCallback((candidateEventContainer: EventContainer) => {
     setEventHeap(prevHeap => {
@@ -155,21 +209,28 @@ export default function Otherpage() {
     return {fetchDumpList, handleToolRequest, retrieveLLMResponse}
   }, [stateHash, setIsRetrievingLLMResponse, autoexecute, autorespond, autotoolfollowup]);
 
-  const getEventTop = useCallback((): string | null => {
+  const getEventTopHash = useCallback((): string | null => {
     if (eventHeap.length > 0) {
       return eventHeap[eventHeap.length - 1].currentEventHash; // JavaScript doesn't support negative indexing
     } else {
       return null;
     }
   }, [eventHeap]); // Don't forget the dependency array
+  const getEventTop = useCallback((): EventContainer | null => {
+    if (eventHeap.length > 0) {
+      return eventHeap[eventHeap.length - 1]; // JavaScript doesn't support negative indexing
+    } else {
+      return null;
+    }
+  }, [eventHeap]); // Don't forget the dependency array
   const submitText = useCallback(async (text: string) => {
-    console.log('hey requesting LLM response yeah!?', getEventTop());
+    console.log('hey requesting LLM response yeah!?', getEventTopHash());
       const submissionEvent : UserTextSubmissionEvent = {
       type: 'UserTextSubmissionEvent',
       text: text,
       timestamp: Date.now()
     }
-    const prevEventHash = getEventTop();
+    const prevEventHash = getEventTopHash();
     const eventContainer : EventContainer = {
       event: submissionEvent,
       prevEventHash: prevEventHash,
@@ -193,16 +254,55 @@ export default function Otherpage() {
     })
     .catch((error) => console.log('error submitting event container', error));
 
-  }, [eventHeap, getEventTop]);
+  }, [eventHeap, getEventTopHash]);
+  const addRequestToolExecutionEvent = useCallback(async () => {
+    console.log('requesting tool execution event yeah?', getEventTopHash());
+    const eventTop = getEventTop();
+    if (eventTop == null) {
+      console.log('event top is null, breaking');
+      return;
+    }
+    if (eventTop.event.type != 'AssistantMessageEvent') {
+      console.log('cannot request tool execution when top event i not assistantmessagevent');
+    }
+    const requestToolExecutionEvent : RequestToolExecutionEvent = {
+      type: 'RequestToolExecutionEvent',
+      text: 'please',
+      timestamp: Date.now()
+    }
+    const prevEventHash = getEventTopHash();
+    const eventContainer : EventContainer = {
+      event: requestToolExecutionEvent,
+      prevEventHash: prevEventHash,
+      currentEventHash: await calculateEventHash(prevEventHash, requestToolExecutionEvent) 
+    }
+    console.log('requestToolExecutionEvent', requestToolExecutionEvent);
+    console.log('eventContainer requestToolexecution', eventContainer);
+    setEventHeap(prev => [...prev, eventContainer]);
+    console.log('ok sending requestToolExecution eventContainer to server now', eventContainer);
+    fetch('/api/message/event', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(eventContainer)
+    })
+    .then((result) => result.json())
+    .then((data) => {
+      console.log('result of trying to submit requesttoolexecution eventContainer', data);
+      if (data.success) {
+        console.log('it was success submitting requesttoolexecutionEvent');
+      }
+    })
+    .catch((error) => console.log('error submitting requesttoolexecution event container', error));
 
+  }, [eventHeap, getEventTopHash, getEventTop]);
   const addRequestLLMResponseEvent = useCallback(async () => {
-    console.log('requesting llm content yeah?', getEventTop());
+    console.log('requesting llm content yeah?', getEventTopHash());
     const assistantRequestEvent : RequestAssistantMessageEvent = {
       type: 'RequestAssistantMessageEvent',
       text: 'ready',
       timestamp: Date.now()
     }
-    const prevEventHash = getEventTop();
+    const prevEventHash = getEventTopHash();
     const eventContainer : EventContainer = {
       event: assistantRequestEvent,
       prevEventHash: prevEventHash,
@@ -226,7 +326,7 @@ export default function Otherpage() {
     })
     .catch((error) => console.log('error submitting event container', error));
 
-  }, [eventHeap, getEventTop]);
+  }, [eventHeap, getEventTopHash]);
   // =================================================================
   // SERVER SIDE EVENTS
   // =================================================================
@@ -245,31 +345,30 @@ const handleSSEMessage = useCallback((event: MessageEvent) => {
   console.log('got SSE data', data);
   sseMessagesRef.current = [...sseMessagesRef.current, data];
   console.log('all sseMessages', sseMessagesRef.current);
-  const sseEventContainer = data as EventContainer
-  console.log('inserting SSE eventcontainer in event heap');
-  insertInEventHeap(sseEventContainer);
-}, [triggerRefresh, eventHeap]);
-
-// Separate useEffect for the refresh logic
-useEffect(() => {
-  fetchDumpList();
-}, [shouldRefresh, fetchDumpList]);
+  if ('event' in data) {
+    const sseEventContainer = data as EventContainer
+    console.log('inserting SSE eventcontainer in event heap');
+    insertInEventHeap(sseEventContainer);
+  } else {
+    console.log('got SSE but was not event', data);
+  }
+}, [triggerRefresh, eventHeap, insertInEventHeap]); // Add all dependencies
 
 // SSE connection useEffect
 useEffect(() => {
   console.log('Connecting to SSE...');
   const eventSource = new EventSource('/api/sse');
-  
+
   eventSource.onopen = () => {
     console.log('SSE connection opened');
   };
-  
+
   eventSource.onmessage = handleSSEMessage;
-  
+
   eventSource.onerror = (error) => {
     console.error('SSE error:', error);
   };
-  
+
   return () => {
     console.log('Closing SSE connection');
     eventSource.close();
@@ -462,6 +561,12 @@ return (
               </span>
               <span className="ml-2">
                 <Button onClick={addRequestLLMResponseEvent}>more</Button>
+              </span>
+              <span className="ml-2">
+                <Button onClick={addRequestToolExecutionEvent}>ex</Button>
+              </span>
+              <span className="ml-2">
+              HeapIntegrity: {heapIntegrity}
               </span>
             </div>
             <div>

@@ -1,0 +1,88 @@
+'use client';
+import { useState, useEffect } from 'react';
+import { Button } from "@/components/ui/button"
+import init, { 
+    add_user_submission_local_heap, 
+    get_event_list, 
+    connect_websocket, 
+    send_latest_event,
+    request_nonstreaming_assistant_message,
+    port_text_message,
+    set_event_callback,
+} from '@/public/pkg/parfit_frontend_wasm.js';
+
+export default function Home() {
+  const [isConnected, setIsConnected] = useState(false);
+  const [input, setInput] = useState('');
+  const [events, setEvents] = useState<any[]>([]);  // <-- Type the events array as any[]
+  const url = 'ws://localhost:8005';
+  
+  const connectHandler = async () => {
+    try {
+      console.log('trying connect', url);
+      
+      const initStart = performance.now();
+      await init();
+      const initEnd = performance.now();
+      
+      console.log(`WASM init took ${(initEnd - initStart).toFixed(2)}ms`);
+      
+      // Set up the callback before connecting
+      set_event_callback((eventJson: string) => {  // <-- Type the parameter as string
+        console.log('New event from WASM:', eventJson);
+        const event = JSON.parse(eventJson);
+        setEvents(prev => [...prev, event]);
+      });
+      
+      await connect_websocket(url);
+      console.log('WebSocket connected successfully!');
+      setIsConnected(true);
+    } catch (error) {
+      console.error('Connection failed:', error);
+    }
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log(input);
+    try {
+      port_text_message(input);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
+    setInput('');
+  }
+
+  return (
+    <div>
+      {!isConnected && (
+        <Button onClick={connectHandler} variant="outline">Connect</Button>
+      )}
+      
+      {isConnected && (
+        <>
+          <p>Connected</p>
+          <form onSubmit={handleSubmit}>
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              autoFocus
+            />
+          </form>
+          
+          <div>
+            <h3>Events:</h3>
+            <div style={{maxHeight: '300px', overflow: 'auto'}}>
+              {events.map((event, index) => (
+                <pre key={index} style={{fontSize: '12px', margin: '5px 0'}}>
+                  {JSON.stringify(event, null, 2)}
+                </pre>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

@@ -26,7 +26,7 @@ const tools: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "start_timer",
-      description: "Starts a countdown timer for a set number of minutes",
+      description: "Starts a countdown timer for a set number of minutes. Never ask for clarification for the label, just write the best guess you have. Also never ask for clarification for the number of seconds, just give your best guess.",
       parameters: {
         type: "object",
         properties: {
